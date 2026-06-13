@@ -1,0 +1,11 @@
+{
+  "vocab_size": 100263,
+  "context_length": 256,
+  "d_model": 768,
+  "num_heads": 12,
+  "num_layers": 12,
+  "d_ff": 3072,
+  "dropout": 0.1,
+  "epoch": 10,
+  "last_loss": 4.8878
+}

@@ -1,0 +1,19 @@
+# Virtual Environments
+Maninmiron/
+Maninmiron311/
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Data files (too large for GitHub - use download_data.py)
+data/
+
+# Keep saved_model but ignore large checkpoint files
+saved_model/*.pt
+saved_model/*.pth
+saved_model/*.bin
+# (config.json will still be tracked)
