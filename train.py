@@ -108,8 +108,9 @@ def train():
     print(f"Device: {device.upper()}")
 
     if c.profile_name == "gpu_4gb":
-        print(">>> gpu_4gb profile: 4GB laptop mode. VSCode/GNOME band rakhna warna OOM aayega!")
-        print(">>> Tip: pkill -f 'code --type=gpu-process'   (training ke pehle)")
+        print(">>> gpu_4gb profile: 4GB laptop mode. EXTREMELY TIGHT. Desktop apps (GNOME/VSCode) already ~250MiB lete hain.")
+        print(">>> MUST DO before training: close browser, VSCode, all Electron apps. Ideally from a clean terminal.")
+        print(">>> Tip: pkill -f 'code --type=gpu-process' ; pkill -f chrome ; pkill -f firefox")
 
     # ── Critical for 4GB laptops: prevent CUDA allocator fragmentation ────────
     # OOM even when "free" MiB dikhe to ye hi fix karta hai zyadatar.
@@ -179,6 +180,7 @@ def train():
 
     if device_type == "cuda":
         print(f"[mem] after model+optim load: {_cuda_mem()}")
+        torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
 
     print(f"\n{'='*56}")
@@ -224,15 +226,19 @@ def train():
             scaler.scale(loss).backward()
             accum_loss += loss.item()
 
-            # Extra visibility for the very first few steps (user was not seeing any output)
+            # Extra visibility + occasional memory relief on tiny GPUs
             if step < early_verbose_steps and (micro + 1) % 16 == 0:
                 print(f"    ... micro {micro+1}/{c.grad_accum} done (step {step+1})", flush=True)
+            if device_type == "cuda" and (micro + 1) % 16 == 0:
+                torch.cuda.empty_cache()
 
         if c.grad_clip > 0:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), c.grad_clip)
         scaler.step(optimizer)
         scaler.update()
+        if device_type == "cuda":
+            torch.cuda.empty_cache()   # critical for 4GB cards during long grad_accum
 
         running_loss += accum_loss
 

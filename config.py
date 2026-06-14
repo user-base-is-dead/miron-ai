@@ -74,15 +74,15 @@ PROFILES = {
         optimizer_type="adamw", compile_model=False, num_workers=2,
     ),
 
-    # Tera RTX 3050 (4GB). Bahut tight zone hai.
-    # paged_adamw_8bit + grad_checkpoint=True + PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True zaroori.
-    # Real world mein GNOME shell + VSCode (gpu-process) + terminal already 350-450MiB kha lete hain.
-    # Isliye training process ko 2.8-3.0 GiB ke andar rehna padta hai warna OOM.
-    # Agar phir bhi OOM aaye -> VSCode completely band kar do training ke dauran,
-    # ya context_length ko 384 pe gira do (profile edit karke).
+    # Tera RTX 3050 Laptop (4GB). Bahut tight zone hai.
+    # paged_adamw_8bit + grad_checkpoint=True + expandable_segments zaroori.
+    # GNOME + desktop already ~200-400MiB kha lete hain.
+    # Model load akele ~1.7-1.8GB le leta hai -> activations + backward ke liye sirf ~1.5GB bachta hai.
+    # Isliye context_length=256 rakha hai (512 pe activations double ho jaate hain aur OOM pakka).
+    # Agar phir bhi OOM -> sab kuch band kar (browser, VSCode, terminals), ya ctx aur gira (128).
     "gpu_4gb": dict(
         min_vram_gb=3.5,
-        context_length=512, d_model=768, num_heads=12, num_kv_heads=4,
+        context_length=256, d_model=768, num_heads=12, num_kv_heads=4,
         num_layers=12, d_ff=2048, grad_checkpoint=True,
         batch_size=1, grad_accum=64, max_steps=20000, lr=6e-4,
         optimizer_type="paged_adamw_8bit", compile_model=False, num_workers=2,
