@@ -191,8 +191,8 @@ def train():
     print(f"  ctx {c.context_length} | tokens/step "
           f"{c.batch_size * c.grad_accum * c.context_length:,}")
     print(f"{'='*56}\n")
-    if c.profile_name == "gpu_4gb" and c.context_length >= 384:
-        print(">>> WARNING: 4GB profile with large ctx is risky. If you still OOM, we can drop model size too.\n")
+    if c.profile_name == "gpu_4gb":
+        print(">>> 4GB mode: model chhota kiya gaya (L10 d640) taaki fit ho. Old checkpoint size mismatch -> fresh start hoga.\n")
 
     early_verbose_steps = 20   # change this number to control how many initial steps get dense logging + micro updates
 
@@ -213,6 +213,8 @@ def train():
             g["lr"] = lr
 
         optimizer.zero_grad(set_to_none=True)
+        if device_type == "cuda":
+            torch.cuda.empty_cache()
         accum_loss = 0.0
         for micro in range(c.grad_accum):
             try:
@@ -228,10 +230,10 @@ def train():
             scaler.scale(loss).backward()
             accum_loss += loss.item()
 
-            # Extra visibility + occasional memory relief on tiny GPUs
+            # Extra visibility + aggressive memory relief on 4GB (every 8 micros to fight fragmentation)
             if step < early_verbose_steps and (micro + 1) % 16 == 0:
                 print(f"    ... micro {micro+1}/{c.grad_accum} done (step {step+1})", flush=True)
-            if device_type == "cuda" and (micro + 1) % 16 == 0:
+            if device_type == "cuda" and (micro + 1) % 8 == 0:
                 torch.cuda.empty_cache()
 
         if c.grad_clip > 0:

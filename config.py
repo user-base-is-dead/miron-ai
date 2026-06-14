@@ -77,13 +77,14 @@ PROFILES = {
     # Tera RTX 3050 Laptop (4GB). Bahut tight zone hai.
     # paged_adamw_8bit + grad_checkpoint=True + expandable_segments zaroori.
     # GNOME + desktop already ~200-400MiB kha lete hain.
-    # Model load akele ~1.7-1.8GB le leta hai -> activations + backward ke liye sirf ~1.5GB bachta hai.
-    # Isliye context_length=256 rakha hai (512 pe activations double ho jaate hain aur OOM pakka).
-    # Agar phir bhi OOM -> sab kuch band kar (browser, VSCode, terminals), ya ctx aur gira (128).
+    # 152M model (L12 d768) ka base load hi ~1.77GB le leta hai -> 4GB pe almost no headroom.
+    # Model ko chhota kiya: L10 d640 h10/kv2 (strong GQA) + ctx256.
+    # Params ~115-125M range expected. Base load ~1.3-1.5GB target.
+    # Agar phir bhi OOM aaye to ctx=128 kar denge.
     "gpu_4gb": dict(
         min_vram_gb=3.5,
-        context_length=256, d_model=768, num_heads=12, num_kv_heads=4,
-        num_layers=12, d_ff=2048, grad_checkpoint=True,
+        context_length=256, d_model=640, num_heads=10, num_kv_heads=2,
+        num_layers=10, d_ff=1792, grad_checkpoint=True,
         batch_size=1, grad_accum=64, max_steps=20000, lr=6e-4,
         optimizer_type="paged_adamw_8bit", compile_model=False, num_workers=2,
     ),
