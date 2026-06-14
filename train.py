@@ -160,6 +160,14 @@ def train():
           f"{c.batch_size * c.grad_accum * c.context_length:,}")
     print(f"{'='*56}\n")
 
+    early_verbose_steps = 20   # change this number to control how many initial steps get dense logging + micro updates
+
+    print(">>> Starting training loop now.")
+    print(">>> First progress line (step 10) will appear AFTER completing 10 steps × grad_accum microbatches.")
+    print(">>> On your hardware this can take 30s – 3 minutes. GPU activity should be visible in nvidia-smi.\n", flush=True)
+    print(f">>> Note: For the first {early_verbose_steps} steps we log EVERY step (so you can see it's not stuck).")
+    print(f">>> After step {early_verbose_steps} it will switch to normal logging every 10 steps.\n", flush=True)
+
     train_iter = iter(train_loader)
     model.train()
     t0 = time.time()
@@ -172,7 +180,7 @@ def train():
 
         optimizer.zero_grad(set_to_none=True)
         accum_loss = 0.0
-        for _ in range(c.grad_accum):
+        for micro in range(c.grad_accum):
             try:
                 x, y = next(train_iter)
             except StopIteration:
@@ -186,6 +194,10 @@ def train():
             scaler.scale(loss).backward()
             accum_loss += loss.item()
 
+            # Extra visibility for the very first few steps (user was not seeing any output)
+            if step < early_verbose_steps and (micro + 1) % 16 == 0:
+                print(f"    ... micro {micro+1}/{c.grad_accum} done (step {step+1})", flush=True)
+
         if c.grad_clip > 0:
             scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), c.grad_clip)
@@ -194,14 +206,23 @@ def train():
 
         running_loss += accum_loss
 
-        if (step + 1) % c.log_every == 0:
+        # Log more frequently at the very beginning so user sees movement immediately
+        # After the initial burst we switch to normal log_every (every 10 steps)
+        log_now = (step + 1) % c.log_every == 0 or step < early_verbose_steps
+        if log_now:
             dt = time.time() - t0
-            avg = running_loss / c.log_every
-            tok_per_sec = c.log_every * c.batch_size * c.grad_accum * c.context_length / dt
+            # For very early steps use cumulative for avg, later use the window
+            if step < early_verbose_steps:
+                avg = running_loss / max(1, step + 1)
+                tok_per_sec = (step + 1) * c.batch_size * c.grad_accum * c.context_length / max(1e-6, dt)
+            else:
+                avg = running_loss / c.log_every
+                tok_per_sec = c.log_every * c.batch_size * c.grad_accum * c.context_length / max(1e-6, dt)
             print(f"step {step+1:>6}/{c.max_steps} | loss {avg:.4f} | "
-                  f"lr {lr:.2e} | {tok_per_sec/1e3:.1f}k tok/s")
-            running_loss = 0.0
-            t0 = time.time()
+                  f"lr {lr:.2e} | ~{tok_per_sec/1e3:.1f}k tok/s", flush=True)
+            if step >= early_verbose_steps:
+                running_loss = 0.0
+                t0 = time.time()
 
         if (step + 1) % c.eval_every == 0:
             val_loss = evaluate(model, val_loader, ctx, device, c.eval_iters)
