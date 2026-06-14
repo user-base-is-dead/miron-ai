@@ -5,7 +5,7 @@
   Features:
     • Step-based training (not epoch-based) — standard for LLM pretraining
     • Mixed precision (bf16 if supported, else fp16 with GradScaler)
-    • Gradient accumulation -> large effective batch on a 6GB GPU
+    • Gradient accumulation -> large effective batch even on 4GB laptops (with heavy optimizations)
     • Cosine LR schedule with linear warmup
     • Gradient clipping + fused AdamW with weight-decay groups
     • Periodic validation + best-checkpoint saving
@@ -191,6 +191,8 @@ def train():
     print(f"  ctx {c.context_length} | tokens/step "
           f"{c.batch_size * c.grad_accum * c.context_length:,}")
     print(f"{'='*56}\n")
+    if c.profile_name == "gpu_4gb" and c.context_length >= 384:
+        print(">>> WARNING: 4GB profile with large ctx is risky. If you still OOM, we can drop model size too.\n")
 
     early_verbose_steps = 20   # change this number to control how many initial steps get dense logging + micro updates
 
