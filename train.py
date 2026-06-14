@@ -33,6 +33,19 @@ from dataset import get_bin_dataloaders
 from maninmiron_llm import ManinmironLLM
 
 
+def _cuda_mem():
+    """Quick GPU memory stats for logging (helps catch pressure early on 4GB cards)."""
+    if not torch.cuda.is_available():
+        return ""
+    try:
+        alloc = torch.cuda.memory_allocated() / (1024 ** 2)
+        reserv = torch.cuda.memory_reserved() / (1024 ** 2)
+        peak = torch.cuda.max_memory_allocated() / (1024 ** 2)
+        return f" | GPU {alloc:.0f}/{reserv:.0f}MiB (peak {peak:.0f})"
+    except Exception:
+        return ""
+
+
 # ── Training hyperparameters ─────────────────────────────────────────────────
 # Saari config ab config.py me hai (device profiles ke roop me). Yahan kuch
 # define karne ki zaroorat nahi — get_active_config() se profile load hota hai.
@@ -94,6 +107,19 @@ def train():
     print(f"Profile: {c.profile_name}")
     print(f"Device: {device.upper()}")
 
+    if c.profile_name == "gpu_4gb":
+        print(">>> gpu_4gb profile: 4GB laptop mode. VSCode/GNOME band rakhna warna OOM aayega!")
+        print(">>> Tip: pkill -f 'code --type=gpu-process'   (training ke pehle)")
+
+    # ── Critical for 4GB laptops: prevent CUDA allocator fragmentation ────────
+    # OOM even when "free" MiB dikhe to ye hi fix karta hai zyadatar.
+    # Desktop apps (VSCode, GNOME) already 300-400MiB kha lete hain.
+    if device_type == "cuda":
+        os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+        torch.cuda.empty_cache()
+        print(f"[mem] PYTORCH_CUDA_ALLOC_CONF={os.environ.get('PYTORCH_CUDA_ALLOC_CONF')}")
+        print(f"[mem] idle before model: {_cuda_mem()}")
+
     # precision: bf16 if GPU supports it, else fp16
     if device_type == "cuda" and torch.cuda.is_bf16_supported():
         amp_dtype = torch.bfloat16
@@ -150,6 +176,10 @@ def train():
     if c.compile_model and device_type == "cuda":
         print("Compiling model (first step will be slow)...")
         model = torch.compile(model)
+
+    if device_type == "cuda":
+        print(f"[mem] after model+optim load: {_cuda_mem()}")
+        torch.cuda.reset_peak_memory_stats()
 
     print(f"\n{'='*56}")
     print(f"  TRAINING START")
@@ -219,7 +249,7 @@ def train():
                 avg = running_loss / c.log_every
                 tok_per_sec = c.log_every * c.batch_size * c.grad_accum * c.context_length / max(1e-6, dt)
             print(f"step {step+1:>6}/{c.max_steps} | loss {avg:.4f} | "
-                  f"lr {lr:.2e} | ~{tok_per_sec/1e3:.1f}k tok/s", flush=True)
+                  f"lr {lr:.2e} | ~{tok_per_sec/1e3:.1f}k tok/s{_cuda_mem()}", flush=True)
             if step >= early_verbose_steps:
                 running_loss = 0.0
                 t0 = time.time()
@@ -233,11 +263,13 @@ def train():
                 save_ckpt(f"{c.save_folder}/maninmiron_best.pt", raw_model,
                           optimizer, scaler, step + 1, best_val, model_cfg, c)
                 print(f"  >> new best saved")
+            torch.cuda.empty_cache()
             t0 = time.time()
 
         if (step + 1) % c.save_every == 0:
             save_ckpt(ckpt_path, raw_model, optimizer, scaler,
                       step + 1, best_val, model_cfg, c)
+            torch.cuda.empty_cache()
 
     save_ckpt(ckpt_path, raw_model, optimizer, scaler, c.max_steps, best_val, model_cfg, c)
     print(f"\nTraining complete. Checkpoints in {c.save_folder}/")
