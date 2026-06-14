@@ -267,7 +267,8 @@ class ManinmironLLM(nn.Module):
         return logits, new_caches
 
     # ── Optimizer with proper weight-decay groups ──
-    def configure_optimizer(self, lr, weight_decay, betas, device_type):
+    def configure_optimizer(self, lr, weight_decay, betas, device_type,
+                            optimizer_type: str = "adamw"):
         decay, no_decay = [], []
         for n, p in self.named_parameters():
             if not p.requires_grad:
@@ -280,7 +281,34 @@ class ManinmironLLM(nn.Module):
             {"params": decay, "weight_decay": weight_decay},
             {"params": no_decay, "weight_decay": 0.0},
         ]
+
+        # 8-bit / paged optimizers (bitsandbytes) — optimizer state ka bojh
+        # bahut kam, paged version to use CPU RAM me rakhta hai. Isse bada
+        # model chhoti VRAM (e.g. 4GB) me fit ho jaata hai.
+        ot = optimizer_type.lower()
+        if ot in ("adam8bit", "paged_adamw_8bit", "pagedadamw8bit", "paged_adam8bit"):
+            try:
+                import bitsandbytes as bnb
+            except ImportError:
+                print("  [optim] bitsandbytes nahi mila -> torch AdamW pe fallback")
+                ot = "adamw"
+            else:
+                OptCls = (bnb.optim.PagedAdamW8bit
+                          if ot.startswith("paged") else bnb.optim.Adam8bit)
+                opt = OptCls(groups, lr=lr, betas=betas, weight_decay=weight_decay)
+                # bnb recommendation: badi embedding/norm params ke liye 32-bit
+                # states rakho (stability). Guarded — kabhi hard-fail na ho.
+                try:
+                    mng = bnb.optim.GlobalOptimManager.get_instance()
+                    mng.register_parameters(list(self.parameters()))
+                    mng.override_config(self.token_emb.weight, "optim_bits", 32)
+                except Exception:
+                    pass
+                print(f"  [optim] bitsandbytes {OptCls.__name__}")
+                return opt
+
         fused = device_type == "cuda"
+        print(f"  [optim] torch AdamW (fused={fused})")
         return torch.optim.AdamW(groups, lr=lr, betas=betas, fused=fused)
 
     # ── Generation with KV-cache + sampling controls ──

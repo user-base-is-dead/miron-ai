@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  miron-ai dependencies  —  EK HI file, GPU + CPU dono pe chalti hai
+# ─────────────────────────────────────────────────────────────────────────────
+#  Install (kisi bhi laptop pe — GPU ho ya na ho):
+#
+#      uv venv Maninmiron311 --python 3.11
+#      source Maninmiron311/bin/activate        # Windows: Maninmiron311\Scripts\activate
+#      uv pip install -r requirements.txt        # (ya: pip install -r requirements.txt)
+#
+#  Kaise dono pe chalti hai:
+#    • torch ka default wheel CUDA-enabled hota hai. Laptop me NVIDIA GPU hai
+#      to wahi GPU use karega; GPU nahi hai to torch khud CPU pe chal jaata hai.
+#      Code (config.py) bhi khud detect karta hai: GPU mila -> gpu profile,
+#      nahi mila -> "cpu" profile. Kuch manually badalna nahi padta.
+#    • bitsandbytes sirf GPU (8-bit/paged optimizer) ke liye hai. CPU-only ya
+#      Mac pe ye skip ho jaata hai (marker se), aur agar install na ho to
+#      training apne aap normal torch AdamW pe chali jaati hai — koi error nahi.
+# ─────────────────────────────────────────────────────────────────────────────
+
+torch==2.12.0
+numpy==2.4.6
+tqdm==4.68.2
+tiktoken==0.13.0
+datasets==5.0.0
+
+# GPU-only optimizer helper (CPU/Mac pe automatically skip). Linux + Windows
+# dono ke official wheels hain. Na mile to code torch AdamW pe fallback karta hai.
+bitsandbytes>=0.43.0 ; platform_system == "Linux" or platform_system == "Windows"

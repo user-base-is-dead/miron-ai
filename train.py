@@ -23,46 +23,22 @@ import math
 import os
 import time
 from contextlib import nullcontext
-from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import torch
 
+from config import get_active_config, build_model_config
 from dataset import get_bin_dataloaders
-from maninmiron_llm import Config, ManinmironLLM
+from maninmiron_llm import ManinmironLLM
 
 
 # ── Training hyperparameters ─────────────────────────────────────────────────
-@dataclass
-class TrainCfg:
-    data_folder:    str   = "data"
-    save_folder:    str   = "saved_model"
-
-    context_length: int   = 1024
-    batch_size:     int   = 4        # micro-batch per step (fits 6GB w/ bf16)
-    grad_accum:     int   = 16       # effective batch = batch_size * grad_accum = 64
-
-    max_steps:      int   = 20000
-    warmup_steps:   int   = 200
-    lr:             float = 6e-4
-    min_lr:         float = 6e-5
-    weight_decay:   float = 0.1
-    beta1:          float = 0.9
-    beta2:          float = 0.95
-    grad_clip:      float = 1.0
-
-    eval_every:     int   = 500
-    eval_iters:     int   = 50
-    log_every:      int   = 10
-    save_every:     int   = 500
-
-    compile_model:  bool  = False
-    grad_checkpoint:bool  = False    # enable if you OOM with a bigger model
-    num_workers:    int   = 2
-    seed:           int   = 1337
+# Saari config ab config.py me hai (device profiles ke roop me). Yahan kuch
+# define karne ki zaroorat nahi — get_active_config() se profile load hota hai.
 
 
-def get_lr(step, c: TrainCfg):
+def get_lr(step, c):
     if step < c.warmup_steps:
         return c.lr * (step + 1) / c.warmup_steps
     if step > c.max_steps:
@@ -108,13 +84,14 @@ def save_ckpt(path, raw_model, optimizer, scaler, step, best_val, model_cfg, tra
 
 
 def train():
-    c = TrainCfg()
+    c = SimpleNamespace(**get_active_config())
     torch.manual_seed(c.seed)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     device_type = "cuda" if device == "cuda" else "cpu"
+    print(f"Profile: {c.profile_name}")
     print(f"Device: {device.upper()}")
 
     # precision: bf16 if GPU supports it, else fp16
@@ -136,15 +113,11 @@ def train():
     print(f"vocab_size: {vocab_size}")
 
     # model
-    model_cfg = Config(
-        vocab_size=vocab_size,
-        context_length=c.context_length,
-        grad_checkpoint=c.grad_checkpoint,
-    )
+    model_cfg = build_model_config(vars(c), vocab_size)
     model = ManinmironLLM(model_cfg).to(device)
 
     optimizer = model.configure_optimizer(
-        c.lr, c.weight_decay, (c.beta1, c.beta2), device_type
+        c.lr, c.weight_decay, (c.beta1, c.beta2), device_type, c.optimizer_type
     )
 
     # resume
@@ -155,13 +128,20 @@ def train():
         print(f"Resuming from {ckpt_path}...")
         ck = torch.load(ckpt_path, map_location=device)
         if "model" in ck:
-            model.load_state_dict(ck["model"])
-            optimizer.load_state_dict(ck["optimizer"])
-            if scaler is not None and ck.get("scaler"):
-                scaler.load_state_dict(ck["scaler"])
-            start_step = ck.get("step", 0)
-            best_val = ck.get("best_val", float("inf"))
-            print(f"  resumed at step {start_step} (best_val {best_val:.4f})")
+            try:
+                model.load_state_dict(ck["model"])
+                optimizer.load_state_dict(ck["optimizer"])
+                if scaler is not None and ck.get("scaler"):
+                    scaler.load_state_dict(ck["scaler"])
+                start_step = ck.get("step", 0)
+                best_val = ck.get("best_val", float("inf"))
+                print(f"  resumed at step {start_step} (best_val {best_val:.4f})")
+            except (RuntimeError, ValueError, KeyError) as e:
+                # Profile/architecture/optimizer badal gaya -> purana checkpoint
+                # fit nahi hoga. Crash ke bajaye fresh training shuru karo.
+                print(f"  checkpoint current profile se match nahi karta ({e})")
+                print("  -> fresh training shuru kar rahe hain")
+                start_step, best_val = 0, float("inf")
         else:
             print("  old-format checkpoint found, incompatible architecture -> training fresh")
 
