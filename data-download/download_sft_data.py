@@ -74,6 +74,18 @@ def row_to_messages(row: dict):
         return [{"role": "user", "content": user},
                 {"role": "assistant", "content": resp}]
 
+    # 4) Q&A style: {"question"/"prompt", "response"/"answer"/"output", optional system}
+    q = row.get("question") or row.get("prompt")
+    a = row.get("output") or row.get("response") or row.get("answer")
+    if q and a:
+        out = []
+        sysmsg = row.get("system_prompt") or row.get("system")
+        if sysmsg:
+            out.append({"role": "system", "content": sysmsg})
+        out.append({"role": "user", "content": q})
+        out.append({"role": "assistant", "content": a})
+        return out
+
     return None
 
 
@@ -87,6 +99,15 @@ SOURCES = {
                    "split": "train_sft", "max_samples": 100_000},
     # Chhota, human-written -> quick test ke liye accha
     "dolly":      {"path": "databricks/databricks-dolly-15k", "config": None,
+                   "split": "train", "max_samples": None},
+    # GPT-4-quality reasoning + answers (bada)
+    "openorca":   {"path": "Open-Orca/OpenOrca", "config": None,
+                   "split": "train", "max_samples": 100_000},
+    # Orca ka cleaner/chhota ShareGPT version
+    "slimorca":   {"path": "Open-Orca/SlimOrca", "config": None,
+                   "split": "train", "max_samples": None},
+    # Code / "kaam karne wala" (coding instructions, Evol-Instruct)
+    "magicoder":  {"path": "ise-uiuc/Magicoder-Evol-Instruct-110K", "config": None,
                    "split": "train", "max_samples": None},
 }
 

@@ -34,6 +34,15 @@ Path(DATA_FOLDER).mkdir(parents=True, exist_ok=True)
 #   separator   -> har entry ke baad file me likhne wala separator
 SOURCES = [
     {
+        "name": "FineWeb-Edu (high-quality educational web text)",
+        "path": "HuggingFaceFW/fineweb-edu",
+        "config": "sample-10BT",
+        "min_chars": 200,
+        "max_samples": 200_000,
+        "output": "fineweb_edu.txt",
+        "separator": "\n\n",
+    },
+    {
         "name": "Wikipedia (English)",
         "path": "wikimedia/wikipedia",
         "config": "20231101.en",
