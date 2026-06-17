@@ -6,9 +6,8 @@
   multi-GB corpora never get fully loaded into RAM. Each __getitem__ returns a
   random (x, y) window of length context_length for next-token prediction.
 
-  Two modes:
-    • get_bin_dataloaders(...)  -> fast path, needs `python scripts/prepare_data.py` first
-    • get_dataloader(...)       -> legacy fallback that tokenizes raw .txt in RAM
+  get_bin_dataloaders(...) -> (train_loader, val_loader, vocab_size). Needs
+  `python scripts/prepare_data.py` to have produced the .bin files first.
 ─────────────────────────────────────────────────────────────────────────────
 """
 
@@ -103,40 +102,3 @@ def get_bin_dataloaders(data_folder: str, batch_size: int, context_length: int,
     val_loader   = DataLoader(val_ds, shuffle=False, **common)
     return train_loader, val_loader, meta["vocab_size"]
 
-
-# ── Legacy in-RAM fallback (small datasets only) ──────────────────────────────
-class TextDataset(Dataset):
-    def __init__(self, data_folder: str, context_length: int = 512):
-        from core.tokenizer import ManinmironTokenizer
-        self.tokenizer = ManinmironTokenizer()
-        self.context_length = context_length
-
-        txt_files = list(Path(data_folder).glob("*.txt"))
-        if not txt_files:
-            raise FileNotFoundError(f"No .txt file in {data_folder}")
-
-        all_text = ""
-        for f in txt_files:
-            print(f"  Reading -> {f.name}")
-            all_text += f.read_text(encoding="utf-8", errors="ignore") + "\n"
-
-        print(f"Total text: {len(all_text):,} chars | tokenizing...")
-        self.tokens = self.tokenizer.enc.encode_ordinary(all_text)
-        print(f"Total tokens: {len(self.tokens):,}")
-
-    def __len__(self):
-        return (len(self.tokens) - 1) // self.context_length
-
-    def __getitem__(self, idx):
-        s = idx * self.context_length
-        e = s + self.context_length
-        x = torch.tensor(self.tokens[s:e], dtype=torch.long)
-        y = torch.tensor(self.tokens[s + 1:e + 1], dtype=torch.long)
-        return x, y
-
-
-def get_dataloader(data_folder: str, batch_size: int = 8, context_length: int = 512):
-    dataset = TextDataset(data_folder, context_length)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True,
-                        num_workers=0, pin_memory=False)
-    return loader, dataset.tokenizer.vocab_size
