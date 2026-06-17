@@ -127,26 +127,93 @@ PROFILES = {
 }
 
 
-# ── Profile resolution ────────────────────────────────────────────────────────
-def _detect_profile() -> str:
-    """GPU ki VRAM padh ke sabse bada profile chuno jo us card pe fit ho."""
+# ── Hardware detection ────────────────────────────────────────────────────────
+def detect_hardware() -> dict:
+    """Compute hardware ka snapshot: kitne GPU, har ek ka naam + total/free VRAM,
+    CUDA/driver available hai ya nahi, aur CPU thread count. Startup summary aur
+    free-VRAM-based profile selection dono yahin se chalte hain.
+    """
+    info = {
+        "cuda_available": False,
+        "torch_cuda_version": None,
+        "num_gpus": 0,
+        "gpus": [],                       # [{index, name, total_gb, free_gb}, ...]
+        "cpu_count": os.cpu_count() or 1,
+    }
     try:
         import torch
     except ImportError:
-        return "cpu"
+        return info
 
+    info["torch_cuda_version"] = torch.version.cuda
     if not torch.cuda.is_available():
+        return info
+
+    info["cuda_available"] = True
+    info["num_gpus"] = torch.cuda.device_count()
+    for i in range(info["num_gpus"]):
+        props = torch.cuda.get_device_properties(i)
+        try:
+            free, total = torch.cuda.mem_get_info(i)
+        except Exception:
+            # mem_get_info kuch setups me fail ho sakta hai -> total pe fallback
+            free, total = props.total_memory, props.total_memory
+        info["gpus"].append({
+            "index": i,
+            "name": props.name,
+            "total_gb": total / 1e9,
+            "free_gb": free / 1e9,
+        })
+    return info
+
+
+def format_hardware_report() -> str:
+    """detect_hardware() ko insaan-padhne-layak summary me badalta hai."""
+    hw = detect_hardware()
+    lines = []
+    if hw["cuda_available"]:
+        lines.append(f"CUDA          : available (torch built for CUDA {hw['torch_cuda_version']})")
+        lines.append(f"GPUs detected : {hw['num_gpus']}")
+        for g in hw["gpus"]:
+            used = g["total_gb"] - g["free_gb"]
+            lines.append(
+                f"  [cuda:{g['index']}] {g['name']} | "
+                f"{g['free_gb']:.1f} free / {used:.1f} used / {g['total_gb']:.1f} GB total"
+            )
+    else:
+        if hw["torch_cuda_version"] is None:
+            why = " (torch CPU-only build hai — GPU chahiye to CUDA wheel install karo)"
+        else:
+            why = " (NVIDIA driver/GPU nahi mila — `nvidia-smi` check karo)"
+        lines.append(f"CUDA          : NOT available{why}")
+        lines.append(f"Mode          : CPU ({hw['cpu_count']} threads)")
+    return "\n".join(lines)
+
+
+# ── Profile resolution ────────────────────────────────────────────────────────
+def _detect_profile(free_gb: float | None = None) -> str:
+    """Available VRAM dekh ke sabse bada profile chuno jo us memory me fit ho.
+
+    TOTAL nahi, FREE memory use karte hain — taaki agar koi aur process (browser,
+    desktop, doosri training) pehle se VRAM kha raha ho to bhi safe profile mile.
+    free_gb na do to SAARE GPU me se sabse KAM free wala liya jaata hai (multi-GPU
+    DDP ke liye safe: model har card pe fit hoga).
+    """
+    hw = detect_hardware()
+    if not hw["cuda_available"] or hw["num_gpus"] == 0:
         return "cpu"
 
-    gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+    if free_gb is None:
+        free_gb = min(g["free_gb"] for g in hw["gpus"])
+
     best = "cpu"
-    for name, p in PROFILES.items():           # chhote se bade ke order me
-        if name != "cpu" and gb >= p["min_vram_gb"]:
-            best = name                         # sabse bada jo fit hota hai
+    for name, p in sorted(PROFILES.items(), key=lambda kv: kv[1]["min_vram_gb"]):
+        if name != "cpu" and free_gb >= p["min_vram_gb"]:
+            best = name                    # sabse bada jo available VRAM me fit ho
     return best
 
 
-def resolve_profile_name() -> str:
+def resolve_profile_name(free_gb: float | None = None) -> str:
     """Priority: env var MIRON_PROFILE > ACTIVE_PROFILE constant > auto-detect."""
     env = os.environ.get("MIRON_PROFILE")
     if env:
@@ -161,13 +228,15 @@ def resolve_profile_name() -> str:
                 f"ACTIVE_PROFILE={ACTIVE_PROFILE!r} galat hai. Valid: {list(PROFILES)}"
             )
         return ACTIVE_PROFILE
-    return _detect_profile()
+    return _detect_profile(free_gb)
 
 
-def get_active_config() -> dict:
+def get_active_config(name: str | None = None, free_gb: float | None = None) -> dict:
     """Resolved profile ko DEFAULTS ke saath merge karke flat dict deta hai.
-    profile ki value DEFAULTS ko override karti hai (e.g. gpu_12gb ka min_lr)."""
-    name = resolve_profile_name()
+    `name` diya ho to wahi use hota hai (DDP me rank-0 decide karke baaki ranks
+    ko broadcast karta hai). profile ki value DEFAULTS ko override karti hai
+    (e.g. gpu_12gb ka min_lr)."""
+    name = name or resolve_profile_name(free_gb)
     cfg = {**DEFAULTS, **PROFILES[name]}
     cfg.pop("min_vram_gb", None)               # ye sirf auto-detect ke liye tha
     cfg["profile_name"] = name
@@ -181,8 +250,10 @@ def build_model_config(cfg: dict, vocab_size: int):
     return Config(vocab_size=vocab_size, **fields)
 
 
-# ── Quick check: `python config.py` chala ke dekh lo kaunsa profile aayega ────
+# ── Quick check: `python config.py` chala ke dekh lo hardware + kaunsa profile ─
 if __name__ == "__main__":
+    print(format_hardware_report())
+    print("-" * 60)
     cfg = get_active_config()
     print(f"Resolved profile : {cfg['profile_name']}")
     print(f"Optimizer        : {cfg['optimizer_type']}")
