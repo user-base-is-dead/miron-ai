@@ -11,6 +11,6 @@
   "norm_eps": 1e-05,
   "tie_weights": true,
   "grad_checkpoint": true,
-  "step": 500,
-  "best_val_loss": 5.2412
+  "step": 1500,
+  "best_val_loss": 4.4054
 }
