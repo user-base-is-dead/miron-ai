@@ -10,7 +10,7 @@
   text rather than answering questions. For chatbot-style replies it needs
   instruction fine-tuning (SFT) first.
 
-  Run:  python chat.py
+  Run:  python scripts/chat.py
 ─────────────────────────────────────────────────────────────────────────────
 """
 
@@ -19,8 +19,12 @@ from pathlib import Path
 
 import torch
 
-from maninmiron_llm import Config, ManinmironLLM
-from tokenizer import ManinmironTokenizer
+# Repo root ko sys.path pe daalo taaki 'core' package import ho sake (yeh file
+# scripts/ ke andar hai).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from core.maninmiron_llm import Config, ManinmironLLM
+from core.tokenizer import ManinmironTokenizer
 
 SAVE_FOLDER = "saved_model"
 
@@ -33,8 +37,8 @@ def pick_checkpoint() -> Path:
     if last.exists():
         return last
     print("Model nahi mila! Pehle train karo:")
-    print("   python prepare_data.py")
-    print("   python train.py")
+    print("   python scripts/prepare_data.py")
+    print("   python scripts/train.py")
     sys.exit(1)
 
 
@@ -45,7 +49,7 @@ def load_model():
     ckpt = torch.load(ckpt_path, map_location=device)
     if "model_cfg" not in ckpt or "model" not in ckpt:
         print("Purane format ka checkpoint mila — yeh naye architecture se "
-              "incompatible hai. Dobara train karo: python train.py")
+              "incompatible hai. Dobara train karo: python scripts/train.py")
         sys.exit(1)
 
     cfg = Config.from_dict(ckpt["model_cfg"])

@@ -1,0 +1,16 @@
+{
+  "profile": "auto",
+  "max_steps": 20000,
+  "lr": 0.0006,
+  "min_lr": 0.00006,
+  "warmup_steps": 200,
+  "batch_size": 1,
+  "grad_accum": 64,
+  "eval_every": 500,
+  "eval_iters": 50,
+  "log_every": 10,
+  "save_every": 500,
+  "num_workers": 2,
+  "weight_decay": 0.1,
+  "grad_clip": 1.0
+}

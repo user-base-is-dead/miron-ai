@@ -15,9 +15,9 @@
     • Optional torch.compile
 
   Workflow:
-    1) python prepare_data.py                       (one time)
-    2) python train.py                              (single GPU / CPU)
-       torchrun --nproc_per_node=NUM_GPUS train.py  (all GPUs on one machine)
+    1) python scripts/prepare_data.py                       (one time)
+    2) python scripts/train.py                              (single GPU / CPU)
+       torchrun --nproc_per_node=NUM_GPUS scripts/train.py  (all GPUs on one machine)
 ─────────────────────────────────────────────────────────────────────────────
 """
 
@@ -34,10 +34,14 @@ import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-from config import (build_model_config, format_hardware_report,
-                    get_active_config, resolve_profile_name)
-from dataset import get_bin_dataloaders
-from maninmiron_llm import ManinmironLLM
+# Repo root ko sys.path pe daalo taaki 'core' package import ho sake (yeh file
+# scripts/ ke andar hai). Isse `python scripts/train.py` (repo root se) chalta hai.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from core.config import (build_model_config, format_hardware_report,
+                         get_active_config, resolve_profile_name)
+from core.dataset import get_bin_dataloaders
+from core.maninmiron_llm import ManinmironLLM
 
 
 # ── Distributed / device helpers ──────────────────────────────────────────────
@@ -175,10 +179,10 @@ def train():
             f"[backend {dist.get_backend()}]")
     elif device_type == "cuda" and torch.cuda.device_count() > 1:
         n = torch.cuda.device_count()
-        log(f"Note          : {n} GPUs mile, par plain `python train.py` sirf "
+        log(f"Note          : {n} GPUs mile, par plain `python scripts/train.py` sirf "
             f"{device} use karega.")
         log(f"                Sab {n} GPUs use karne ke liye:  "
-            f"torchrun --nproc_per_node={n} train.py")
+            f"torchrun --nproc_per_node={n} scripts/train.py")
     log("-" * 60)
 
     # ── Resolve profile ───────────────────────────────────────────────────────
@@ -197,6 +201,21 @@ def train():
     torch.manual_seed(c.seed + rank)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
+
+    # ── Large-batch LR scaling (DDP) ──────────────────────────────────────────
+    # DDP me effective batch world_size guna ho jaata hai (har GPU apna batch
+    # chalata hai, gradients average hote hain). Bade batch ke saath LR bhi
+    # badhana padta hai warna training dhimi/under-fit hoti hai. sqrt-rule use
+    # karte hain (linear rule bade N pe unstable ho sakta hai). 1 GPU / laptop pe
+    # koi change nahi (world_size == 1).
+    if is_ddp and world_size > 1:
+        lr_scale = world_size ** 0.5
+        c.lr = c.lr * lr_scale
+        c.min_lr = c.min_lr * lr_scale
+        log(f"[lr] world_size={world_size} -> LR x{lr_scale:.2f} (sqrt rule): "
+            f"lr={c.lr:.2e}, min_lr={c.min_lr:.2e}")
+        log("[lr] NOTE: 100s of GPUs jaise extreme scale pe LR + warmup proper "
+            "tuning maangte hain; ye ek reasonable default hai, magic nahi.")
 
     log(f"Profile: {c.profile_name}")
     log(f"Device : {device}")
@@ -416,9 +435,9 @@ def _print_oom_help():
     print("  (Linux pe raw crash/stack-trace ke bajaye yeh message).")
     print("  Model is GPU ki free VRAM me fit nahi hua. Try (asaan se mushkil):")
     print("   1) Doosri GPU apps band karo (browser/VSCode/Electron), phir dobara chalao")
-    print("   2) Chhota profile :  MIRON_PROFILE=gpu_4gb python train.py   (ya cpu)")
-    print("   3) config.py me us profile ka context_length / batch_size ghatao")
-    print("   4) Free VRAM dekho :  python config.py    ya    nvidia-smi")
+    print("   2) Chhota profile :  MIRON_PROFILE=gpu_4gb python scripts/train.py   (ya cpu)")
+    print("   3) core/config.py ke us profile ka context_length / batch_size ghatao")
+    print("   4) Free VRAM dekho :  python -m core.config    ya    nvidia-smi")
     print("=" * 60)
 
 

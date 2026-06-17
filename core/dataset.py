@@ -7,7 +7,7 @@
   random (x, y) window of length context_length for next-token prediction.
 
   Two modes:
-    • get_bin_dataloaders(...)  -> fast path, needs `python prepare_data.py` first
+    • get_bin_dataloaders(...)  -> fast path, needs `python scripts/prepare_data.py` first
     • get_dataloader(...)       -> legacy fallback that tokenizes raw .txt in RAM
 ─────────────────────────────────────────────────────────────────────────────
 """
@@ -65,16 +65,34 @@ def _seed_worker(worker_id: int) -> None:
 
 def get_bin_dataloaders(data_folder: str, batch_size: int, context_length: int,
                         num_workers: int = 2):
-    meta_path = Path(data_folder) / "meta.json"
-    if not meta_path.exists():
+    folder = Path(data_folder)
+    meta_path = folder / "meta.json"
+    if not meta_path.exists() or meta_path.stat().st_size == 0:
         raise FileNotFoundError(
-            f"{meta_path} not found. Run `python prepare_data.py` first."
+            f"{meta_path} missing ya empty hai. "
+            f"Pehle data taiyaar karo:  python scripts/prepare_data.py"
         )
-    meta = json.loads(meta_path.read_text())
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"{meta_path} corrupt JSON hai ({e}). "
+            f"Dobara banao:  python scripts/prepare_data.py"
+        ) from e
+    if meta.get("dtype") not in DTYPE_MAP:
+        raise ValueError(f"meta.json me galat/missing 'dtype': {meta.get('dtype')!r}")
     dtype = DTYPE_MAP[meta["dtype"]]
 
-    train_ds = BinDataset(f"{data_folder}/train.bin", context_length, dtype)
-    val_ds = BinDataset(f"{data_folder}/val.bin", context_length, dtype)
+    for fname in ("train.bin", "val.bin"):
+        p = folder / fname
+        if not p.exists() or p.stat().st_size == 0:
+            raise FileNotFoundError(
+                f"{p} missing ya empty hai. "
+                f"Pehle data taiyaar karo:  python scripts/prepare_data.py"
+            )
+
+    train_ds = BinDataset(str(folder / "train.bin"), context_length, dtype)
+    val_ds = BinDataset(str(folder / "val.bin"), context_length, dtype)
     val_ds.length = min(200, val_ds.length)   # validation pass ko chhota rakho
 
     common = dict(batch_size=batch_size, num_workers=num_workers,
@@ -89,7 +107,7 @@ def get_bin_dataloaders(data_folder: str, batch_size: int, context_length: int,
 # ── Legacy in-RAM fallback (small datasets only) ──────────────────────────────
 class TextDataset(Dataset):
     def __init__(self, data_folder: str, context_length: int = 512):
-        from tokenizer import ManinmironTokenizer
+        from core.tokenizer import ManinmironTokenizer
         self.tokenizer = ManinmironTokenizer()
         self.context_length = context_length
 

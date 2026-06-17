@@ -17,11 +17,11 @@
 #      training apne aap normal torch AdamW pe chali jaati hai — koi error nahi.
 # ─────────────────────────────────────────────────────────────────────────────
 
-torch==2.12.0
+torch==2.5.1
 numpy==2.4.6
-tqdm==4.68.2
+tqdm==4.67.3
 tiktoken==0.13.0
-datasets==5.0.0
+datasets==4.8.5
 
 # GPU-only optimizer helper (CPU/Mac pe automatically skip). Linux + Windows
 # dono ke official wheels hain. Na mile to code torch AdamW pe fallback karta hai.

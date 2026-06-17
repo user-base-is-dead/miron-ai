@@ -9,7 +9,7 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Data files (too large for GitHub - use download_data.py)
+# Data files (too large for GitHub - use the data-download/ scripts)
 data/
 
 # Keep saved_model but ignore large checkpoint files
@@ -17,3 +17,7 @@ saved_model/*.pt
 saved_model/*.pth
 saved_model/*.bin
 # (config.json will still be tracked)
+
+# Tokenizer self-test output + transient smoke-test artifacts
+tokenizer_config.json
+_smoke_out/

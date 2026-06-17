@@ -6,18 +6,21 @@
   ke settings dono hote hain. Naye device pe bas profile switch karo —
   model aur training apne aap us hardware ke hisaab se set ho jayenge.
 
-  Profile kaise chunta hai (priority order):
-    1. Environment variable   ->  MIRON_PROFILE=gpu_8gb python train.py
-    2. ACTIVE_PROFILE constant ->  neeche "gpu_4gb" likh do
-    3. "auto" (default)        ->  GPU ki VRAM padh ke khud chun leta hai
+  Profile kaise chunta hai (priority order, upar wala jeetta hai):
+    1. Environment variable    ->  MIRON_PROFILE=gpu_8gb python scripts/train.py
+    2. ACTIVE_PROFILE constant  ->  neeche "gpu_4gb" likh do
+    3. settings/settings.json ka "profile"  (single-process runs)
+    4. "auto" (default)         ->  GPU ki free VRAM padh ke khud chun leta hai
 
-  vocab_size yahan NAHI hai — wo training ke waqt data/meta.json se aata hai.
+  vocab_size yahan NAHI hai — wo training ke waqt data/tokenized/meta.json se aata hai.
 ─────────────────────────────────────────────────────────────────────────────
 """
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 
 
 # ── Yahan badlo: kaunsa profile use karna hai ────────────────────────────────
@@ -36,7 +39,7 @@ MODEL_FIELDS = {
 
 # ── Har profile me common cheezein (taaki har profile chhota rahe) ────────────
 DEFAULTS = dict(
-    data_folder="data",
+    data_folder="data/tokenized",
     save_folder="saved_model",
     # LR schedule
     warmup_steps=200,
@@ -213,8 +216,9 @@ def _detect_profile(free_gb: float | None = None) -> str:
     return best
 
 
-def resolve_profile_name(free_gb: float | None = None) -> str:
-    """Priority: env var MIRON_PROFILE > ACTIVE_PROFILE constant > auto-detect."""
+def _explicit_profile() -> str | None:
+    """env MIRON_PROFILE > ACTIVE_PROFILE constant. Koi explicit set na ho to None
+    (taaki caller settings.json / auto-detect pe gir sake)."""
     env = os.environ.get("MIRON_PROFILE")
     if env:
         if env not in PROFILES:
@@ -228,29 +232,65 @@ def resolve_profile_name(free_gb: float | None = None) -> str:
                 f"ACTIVE_PROFILE={ACTIVE_PROFILE!r} galat hai. Valid: {list(PROFILES)}"
             )
         return ACTIVE_PROFILE
-    return _detect_profile(free_gb)
+    return None
+
+
+def resolve_profile_name(free_gb: float | None = None) -> str:
+    """Priority: env MIRON_PROFILE > ACTIVE_PROFILE > auto-detect (free VRAM)."""
+    return _explicit_profile() or _detect_profile(free_gb)
+
+
+# ── User settings file (easy editable, bina code chhue) ───────────────────────
+# settings/settings.json ki saari key:value resolved profile ke UPAR lagti hain.
+SETTINGS_FILE = Path(__file__).resolve().parent.parent / "settings" / "settings.json"
+
+
+def _load_overrides() -> dict:
+    """settings/settings.json ki top-level key:value padho (flat file). File na ho
+    / galat JSON ho to {} (profile defaults use honge). '_'-prefixed keys ignore."""
+    if not SETTINGS_FILE.exists():
+        return {}
+    try:
+        data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"[config] settings.json padha nahi ja saka ({e}); profile defaults use kar rahe hain")
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {k: v for k, v in data.items() if not str(k).startswith("_")}
 
 
 def get_active_config(name: str | None = None, free_gb: float | None = None) -> dict:
-    """Resolved profile ko DEFAULTS ke saath merge karke flat dict deta hai.
-    `name` diya ho to wahi use hota hai (DDP me rank-0 decide karke baaki ranks
-    ko broadcast karta hai). profile ki value DEFAULTS ko override karti hai
-    (e.g. gpu_12gb ka min_lr)."""
-    name = name or resolve_profile_name(free_gb)
+    """Resolved profile ko DEFAULTS ke saath merge karke flat dict deta hai, phir
+    settings/settings.json ke overrides upar lagata hai.
+    `name` diya ho to wahi use hota hai (DDP me rank-0 decide karke broadcast
+    karta hai). single-process me settings.json ka "profile" bhi force kar sakta hai.
+    """
+    overrides = _load_overrides()
+    settings_profile = overrides.pop("profile", None)   # settings.json ka profile
+    if settings_profile in (None, "", "auto"):
+        settings_profile = None
+    elif settings_profile not in PROFILES:
+        print(f"[config] settings.json me profile={settings_profile!r} galat hai; "
+              f"ignore. Valid: {list(PROFILES)}")
+        settings_profile = None
+    # priority: explicit name arg (DDP) > env/ACTIVE > settings.json > auto-detect
+    name = name or _explicit_profile() or settings_profile or _detect_profile(free_gb)
     cfg = {**DEFAULTS, **PROFILES[name]}
-    cfg.pop("min_vram_gb", None)               # ye sirf auto-detect ke liye tha
+    cfg.pop("min_vram_gb", None)                   # ye sirf auto-detect ke liye tha
+    cfg.update(overrides)                          # user settings (sabse upar)
     cfg["profile_name"] = name
     return cfg
 
 
 def build_model_config(cfg: dict, vocab_size: int):
     """Flat config dict + meta.json ka vocab_size -> maninmiron_llm.Config."""
-    from maninmiron_llm import Config
+    from core.maninmiron_llm import Config
     fields = {k: cfg[k] for k in MODEL_FIELDS if k in cfg}
     return Config(vocab_size=vocab_size, **fields)
 
 
-# ── Quick check: `python config.py` chala ke dekh lo hardware + kaunsa profile ─
+# ── Quick check: `python -m core.config` chala ke dekh lo hardware + profile ──
 if __name__ == "__main__":
     print(format_hardware_report())
     print("-" * 60)
@@ -261,3 +301,9 @@ if __name__ == "__main__":
           f"h{cfg['num_heads']}/kv{cfg['num_kv_heads']} ctx{cfg['context_length']}")
     print(f"Batch            : {cfg['batch_size']} x accum {cfg['grad_accum']} "
           f"= {cfg['batch_size'] * cfg['grad_accum']} effective")
+    print(f"Max steps        : {cfg['max_steps']}")
+    ov = _load_overrides()
+    if ov:
+        print(f"settings.json    : overrides active -> {ov}")
+    else:
+        print("settings.json    : koi override nahi (profile defaults use ho rahe)")

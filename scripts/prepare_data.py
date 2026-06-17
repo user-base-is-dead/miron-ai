@@ -6,27 +6,31 @@
   Isliye ek hi baar tokenize karke uint16/uint32 .bin file bana lete hain, jise
   training ke time np.memmap se bina RAM bhare padha jaa sakta hai.
 
-  Output:
-    data/train.bin   (90%)
-    data/val.bin     (10%)
-    data/meta.json   (dtype, token counts, vocab size)
+  Input :  data/downloaded-data/*.txt        (download_data.py se aaya raw text)
+  Output:  data/tokenized/{train.bin, val.bin, meta.json}
 
-  Run:  python prepare_data.py
+  Run:  python scripts/prepare_data.py
 """
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
 from tqdm import tqdm
 
-from tokenizer import ManinmironTokenizer
+# Repo root ko sys.path pe daalo taaki 'core' package import ho sake (yeh file
+# scripts/ ke andar hai).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-DATA_FOLDER  = "data"
-TRAIN_BIN    = f"{DATA_FOLDER}/train.bin"
-VAL_BIN      = f"{DATA_FOLDER}/val.bin"
-META_FILE    = f"{DATA_FOLDER}/meta.json"
+from core.tokenizer import ManinmironTokenizer
+
+RAW_FOLDER   = "data/downloaded-data"   # raw .txt yahan se (download_data.py output)
+OUT_FOLDER   = "data/tokenized"         # bins + meta yahan (training yahin se padhta hai)
+TRAIN_BIN    = f"{OUT_FOLDER}/train.bin"
+VAL_BIN      = f"{OUT_FOLDER}/val.bin"
+META_FILE    = f"{OUT_FOLDER}/meta.json"
 VAL_FRACTION = 0.01            # 1% held out for validation
 CHUNK_CHARS  = 2_000_000       # read text in ~2MB chunks to bound memory
 
@@ -36,15 +40,19 @@ def main():
     # cl100k_base max id < 100263 -> fits in uint32 (uint16 would overflow)
     dtype = np.uint32
 
-    txt_files = sorted(Path(DATA_FOLDER).glob("*.txt"))
+    txt_files = sorted(Path(RAW_FOLDER).glob("*.txt"))
     if not txt_files:
-        raise FileNotFoundError(f"No .txt files in {DATA_FOLDER}/. Run download_data.py first.")
+        raise FileNotFoundError(
+            f"No .txt files in {RAW_FOLDER}/. "
+            f"Pehle data download karo:  python data-download/download_data.py"
+        )
 
+    Path(OUT_FOLDER).mkdir(parents=True, exist_ok=True)
     print(f"Found {len(txt_files)} file(s): {[f.name for f in txt_files]}")
 
     # First pass: stream-tokenize everything into a temp flat .bin (train candidate),
     # then split. We write directly and split by index afterwards.
-    tmp_bin = f"{DATA_FOLDER}/_all.bin"
+    tmp_bin = f"{OUT_FOLDER}/_all.bin"
     total_tokens = 0
 
     with open(tmp_bin, "wb") as out:
@@ -111,7 +119,7 @@ def main():
     print(f"\nDone. {META_FILE} written.")
     print(f"  train.bin : {n_train:,} tokens")
     print(f"  val.bin   : {n_val:,} tokens")
-    print("\nAb train karo:  python train.py")
+    print("\nAb train karo:  python scripts/train.py")
 
 
 if __name__ == "__main__":

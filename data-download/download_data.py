@@ -1,12 +1,12 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
-  DOWNLOAD DATA  —  raw text corpora ko data/ folder me download karta hai
+  DOWNLOAD DATA  —  raw text corpora ko data/downloaded-data/ me download karta hai
 ─────────────────────────────────────────────────────────────────────────────
   HuggingFace datasets se streaming mode me text kheech ke plain .txt likhta
   hai (poora dataset RAM/disk me nahi aata). Har source ka apna config neeche
   SOURCES list me hai — naya source add karna ho to bas ek dict aur daal do.
 
-  Run:  python download_data.py
+  Run (repo root se):  python data-download/download_data.py
 ─────────────────────────────────────────────────────────────────────────────
 """
 
@@ -16,8 +16,11 @@ from pathlib import Path
 
 from datasets import load_dataset
 
-DATA_FOLDER = "data"
-Path(DATA_FOLDER).mkdir(exist_ok=True)
+# Repo root = is file ke folder (data-download/) ka parent. Isse output path
+# CWD pe depend nahi karta — kahin se bhi chalao, data sahi jagah jaata hai.
+_ROOT = Path(__file__).resolve().parent.parent
+DATA_FOLDER = str(_ROOT / "data" / "downloaded-data")
+Path(DATA_FOLDER).mkdir(parents=True, exist_ok=True)
 
 
 # ── Sources ──────────────────────────────────────────────────────────────────
@@ -107,9 +110,9 @@ def main() -> None:
     print("\n" + "=" * 55)
     print("  Sab datasets download complete! Files:")
     for spec in SOURCES:
-        print(f"    data/{spec['output']}")
-    print("\n  Ab tokenize karo:  python prepare_data.py")
-    print("  Phir train karo :  python train.py")
+        print(f"    data/downloaded-data/{spec['output']}")
+    print("\n  Ab tokenize karo:  python scripts/prepare_data.py")
+    print("  Phir train karo :  python scripts/train.py")
     print("=" * 55)
 
 
