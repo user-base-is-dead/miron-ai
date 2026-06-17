@@ -20,7 +20,6 @@
 
 import json
 import math
-import os
 import time
 from contextlib import nullcontext
 from pathlib import Path
@@ -67,7 +66,7 @@ def evaluate(model, val_loader, ctx, device, max_iters):
 
 
 def save_ckpt(path, raw_model, optimizer, scaler, step, best_val, model_cfg, train_cfg):
-    Path(train_cfg.save_folder).mkdir(exist_ok=True)
+    Path(train_cfg.save_folder).mkdir(parents=True, exist_ok=True)
     torch.save({
         "model":      raw_model.state_dict(),
         "optimizer":  optimizer.state_dict(),
@@ -152,7 +151,7 @@ def train():
         model = torch.compile(model)
 
     print(f"\n{'='*56}")
-    print(f"  TRAINING START")
+    print("  TRAINING START")
     print(f"  steps {start_step} -> {c.max_steps}")
     print(f"  micro-batch {c.batch_size} x accum {c.grad_accum} = "
           f"{c.batch_size * c.grad_accum} effective")
@@ -160,18 +159,17 @@ def train():
           f"{c.batch_size * c.grad_accum * c.context_length:,}")
     print(f"{'='*56}\n")
 
-    early_verbose_steps = 20   # change this number to control how many initial steps get dense logging + micro updates
-
-    print(">>> Starting training loop now.")
-    print(">>> First progress line (step 10) will appear AFTER completing 10 steps × grad_accum microbatches.")
-    print(">>> On your hardware this can take 30s – 3 minutes. GPU activity should be visible in nvidia-smi.\n", flush=True)
-    print(f">>> Note: For the first {early_verbose_steps} steps we log EVERY step (so you can see it's not stuck).")
-    print(f">>> After step {early_verbose_steps} it will switch to normal logging every 10 steps.\n", flush=True)
+    # First few steps log every step (so it's clear training isn't stuck on a
+    # slow GPU); after that we log every `log_every` steps.
+    dense_log_steps = 20
+    print(f"First optimizer step can be slow (data priming / compile). "
+          f"Logging every step for the first {dense_log_steps} steps.\n", flush=True)
 
     train_iter = iter(train_loader)
     model.train()
     t0 = time.time()
-    running_loss = 0.0
+    window_loss = 0.0    # loss summed over the current logging window
+    window_steps = 0     # number of steps in the current logging window
 
     for step in range(start_step, c.max_steps):
         lr = get_lr(step, c)
@@ -179,8 +177,8 @@ def train():
             g["lr"] = lr
 
         optimizer.zero_grad(set_to_none=True)
-        accum_loss = 0.0
-        for micro in range(c.grad_accum):
+        step_loss = 0.0
+        for _ in range(c.grad_accum):
             try:
                 x, y = next(train_iter)
             except StopIteration:
@@ -192,11 +190,7 @@ def train():
                 _, loss = model(x, y)
                 loss = loss / c.grad_accum
             scaler.scale(loss).backward()
-            accum_loss += loss.item()
-
-            # Extra visibility for the very first few steps (user was not seeing any output)
-            if step < early_verbose_steps and (micro + 1) % 16 == 0:
-                print(f"    ... micro {micro+1}/{c.grad_accum} done (step {step+1})", flush=True)
+            step_loss += loss.item()
 
         if c.grad_clip > 0:
             scaler.unscale_(optimizer)
@@ -204,35 +198,34 @@ def train():
         scaler.step(optimizer)
         scaler.update()
 
-        running_loss += accum_loss
+        window_loss += step_loss
+        window_steps += 1
 
-        # Log more frequently at the very beginning so user sees movement immediately
-        # After the initial burst we switch to normal log_every (every 10 steps)
-        log_now = (step + 1) % c.log_every == 0 or step < early_verbose_steps
-        if log_now:
-            dt = time.time() - t0
-            # For very early steps use cumulative for avg, later use the window
-            if step < early_verbose_steps:
-                avg = running_loss / max(1, step + 1)
-                tok_per_sec = (step + 1) * c.batch_size * c.grad_accum * c.context_length / max(1e-6, dt)
-            else:
-                avg = running_loss / c.log_every
-                tok_per_sec = c.log_every * c.batch_size * c.grad_accum * c.context_length / max(1e-6, dt)
+        # Dense logging for the first few steps, then every `log_every` steps.
+        # Loss and throughput are both averaged over the current window, so the
+        # window is always reset together after a log line is printed.
+        if (step + 1) % c.log_every == 0 or step < dense_log_steps:
+            dt = max(1e-6, time.time() - t0)
+            avg = window_loss / window_steps
+            tokens = window_steps * c.batch_size * c.grad_accum * c.context_length
             print(f"step {step+1:>6}/{c.max_steps} | loss {avg:.4f} | "
-                  f"lr {lr:.2e} | ~{tok_per_sec/1e3:.1f}k tok/s", flush=True)
-            if step >= early_verbose_steps:
-                running_loss = 0.0
-                t0 = time.time()
+                  f"lr {lr:.2e} | ~{tokens / dt / 1e3:.1f}k tok/s", flush=True)
+            window_loss = 0.0
+            window_steps = 0
+            t0 = time.time()
 
         if (step + 1) % c.eval_every == 0:
             val_loss = evaluate(model, val_loader, ctx, device, c.eval_iters)
-            print(f"  >> eval @ step {step+1}: val_loss {val_loss:.4f} "
+            print(f"  eval @ step {step+1}: val_loss {val_loss:.4f} "
                   f"(best {best_val:.4f})")
             if val_loss < best_val:
                 best_val = val_loss
                 save_ckpt(f"{c.save_folder}/maninmiron_best.pt", raw_model,
                           optimizer, scaler, step + 1, best_val, model_cfg, c)
-                print(f"  >> new best saved")
+                print(f"  -> new best (val_loss {best_val:.4f}) saved")
+            # don't count eval / checkpoint time against training throughput
+            window_loss = 0.0
+            window_steps = 0
             t0 = time.time()
 
         if (step + 1) % c.save_every == 0:

@@ -55,6 +55,14 @@ class BinDataset(Dataset):
         return x, y
 
 
+def _seed_worker(worker_id: int) -> None:
+    # PyTorch har worker ke python/torch RNG ko to per-worker seed karta hai,
+    # par numpy ko nahi. Bina iske saare workers ek jaisi random windows
+    # nikaalte hain (duplicate batches -> kharab training). Worker ke andar
+    # torch.initial_seed() already per-worker unique hota hai; usse numpy seed.
+    np.random.seed(torch.initial_seed() % 2**32)
+
+
 def get_bin_dataloaders(data_folder: str, batch_size: int, context_length: int,
                         num_workers: int = 2):
     meta_path = Path(data_folder) / "meta.json"
@@ -66,12 +74,13 @@ def get_bin_dataloaders(data_folder: str, batch_size: int, context_length: int,
     dtype = DTYPE_MAP[meta["dtype"]]
 
     train_ds = BinDataset(f"{data_folder}/train.bin", context_length, dtype)
-    val_ds   = BinDataset(f"{data_folder}/val.bin", context_length, dtype,
-                          samples_per_epoch=min(200, len(BinDataset(f"{data_folder}/val.bin", context_length, dtype))))
+    val_ds = BinDataset(f"{data_folder}/val.bin", context_length, dtype)
+    val_ds.length = min(200, val_ds.length)   # validation pass ko chhota rakho
 
     common = dict(batch_size=batch_size, num_workers=num_workers,
                   pin_memory=True, drop_last=True,
-                  persistent_workers=num_workers > 0)
+                  persistent_workers=num_workers > 0,
+                  worker_init_fn=_seed_worker)
     train_loader = DataLoader(train_ds, shuffle=False, **common)
     val_loader   = DataLoader(val_ds, shuffle=False, **common)
     return train_loader, val_loader, meta["vocab_size"]

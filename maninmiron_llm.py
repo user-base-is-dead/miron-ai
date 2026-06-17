@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, asdict
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -327,10 +326,14 @@ class ManinmironLLM(nn.Module):
         for _ in range(max_new_tokens):
             logits = logits[:, -1, :]
 
-            # repetition penalty
+            # repetition penalty (CTRL-style): positive logit ko divide karo aur
+            # negative ko multiply -- dono case me us token ki probability ghatti
+            # hai. Sirf divide karne se negative logits ki prob ULTA badh jaati.
             if repetition_penalty != 1.0:
                 for tok in set(generated[0].tolist()):
-                    logits[0, tok] /= repetition_penalty
+                    score = logits[0, tok]
+                    logits[0, tok] = (score / repetition_penalty if score > 0
+                                      else score * repetition_penalty)
 
             logits = logits / max(temperature, 1e-5)
 

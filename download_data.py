@@ -1,102 +1,117 @@
 """
-MANINMIRON - Huge Dataset Downloader
-Automatically sab datasets download karta hai data/ folder mein
+─────────────────────────────────────────────────────────────────────────────
+  DOWNLOAD DATA  —  raw text corpora ko data/ folder me download karta hai
+─────────────────────────────────────────────────────────────────────────────
+  HuggingFace datasets se streaming mode me text kheech ke plain .txt likhta
+  hai (poora dataset RAM/disk me nahi aata). Har source ka apna config neeche
+  SOURCES list me hai — naya source add karna ho to bas ek dict aur daal do.
+
+  Run:  python download_data.py
+─────────────────────────────────────────────────────────────────────────────
 """
 
-from datasets import load_dataset
 import os
 import re
 from pathlib import Path
+
+from datasets import load_dataset
 
 DATA_FOLDER = "data"
 Path(DATA_FOLDER).mkdir(exist_ok=True)
 
 
+# ── Sources ──────────────────────────────────────────────────────────────────
+# Har source ke fields:
+#   name        -> log me dikhne ka label
+#   path        -> HuggingFace dataset id
+#   config      -> dataset config name (jis source me na ho wahan None)
+#   min_chars   -> isse chhoti cleaned entries skip
+#   max_samples -> itni entries ke baad ruk jao
+#   output      -> data/ ke andar output file ka naam
+#   separator   -> har entry ke baad file me likhne wala separator
+SOURCES = [
+    {
+        "name": "Wikipedia (English)",
+        "path": "wikimedia/wikipedia",
+        "config": "20231101.en",
+        "min_chars": 300,
+        "max_samples": 100_000,
+        "output": "wikipedia_en.txt",
+        "separator": "\n\n" + "=" * 60 + "\n\n",
+    },
+    {
+        "name": "OpenWebText",
+        "path": "Skylion007/openwebtext",
+        "config": None,
+        "min_chars": 200,
+        "max_samples": 200_000,
+        "output": "openwebtext.txt",
+        "separator": "\n\n",
+    },
+    {
+        "name": "BookCorpus",
+        "path": "bookcorpus/bookcorpus",
+        "config": None,
+        "min_chars": 50,
+        "max_samples": 100_000,
+        "output": "books.txt",
+        "separator": "\n",
+    },
+]
+
+
 def clean_text(text: str) -> str:
-    text = re.sub(r' +', ' ', text)
-    text = re.sub(r'\n{3,}', '\n\n', text)
-    text = text.strip()
-    return text
+    text = re.sub(r" +", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
-def download_wikipedia():
-    print("\n📚 [1/3] Wikipedia English download ho raha hai (100K articles ~1GB)...")
-    output_file = f"{DATA_FOLDER}/wikipedia_en.txt"
+def download_source(spec: dict) -> None:
+    """Ek source ko stream karke uske output .txt me likhta hai."""
+    output_file = f"{DATA_FOLDER}/{spec['output']}"
+    print(f"\n[{spec['name']}] {spec['max_samples']:,} samples download ho rahe hain...")
+
+    # config tabhi pass karo jab source ko zaroorat ho
+    args = [spec["path"]] + ([spec["config"]] if spec["config"] else [])
+    dataset = load_dataset(*args, split="train", streaming=True)
+
+    text_field = spec.get("text_field", "text")
+    log_every = max(1, spec["max_samples"] // 20)   # ~20 progress lines per source
     count = 0
-    dataset = load_dataset("wikimedia/wikipedia", "20231101.en", split="train", streaming=True)
-    with open(output_file, "w", encoding="utf-8") as f:
-        for article in dataset:
-            text = clean_text(article["text"])
-            if len(text) > 300:
-                f.write(text + "\n\n" + "=" * 60 + "\n\n")
-                count += 1
-                if count % 5000 == 0:
-                    size = os.path.getsize(output_file) / (1024*1024)
-                    print(f"   {count}/100000 | {size:.0f} MB")
-                if count >= 100000:
-                    break
-    size_mb = os.path.getsize(output_file) / (1024*1024)
-    print(f"✅ Wikipedia done → {size_mb:.0f} MB")
-
-
-def download_openwebtext():
-    print("\n🌐 [2/3] OpenWebText download ho raha hai (200K samples ~2GB)...")
-    output_file = f"{DATA_FOLDER}/openwebtext.txt"
-    count = 0
-    dataset = load_dataset("Skylion007/openwebtext", split="train", streaming=True)
     with open(output_file, "w", encoding="utf-8") as f:
         for sample in dataset:
-            text = clean_text(sample["text"])
-            if len(text) > 200:
-                f.write(text + "\n\n")
-                count += 1
-                if count % 10000 == 0:
-                    size = os.path.getsize(output_file) / (1024*1024)
-                    print(f"   {count}/200000 | {size:.0f} MB")
-                if count >= 200000:
-                    break
-    size_mb = os.path.getsize(output_file) / (1024*1024)
-    print(f"✅ OpenWebText done → {size_mb:.0f} MB")
+            text = clean_text(sample[text_field])
+            if len(text) < spec["min_chars"]:
+                continue
+            f.write(text + spec["separator"])
+            count += 1
+            if count % log_every == 0:
+                size_mb = os.path.getsize(output_file) / (1024 * 1024)
+                print(f"   {count:,}/{spec['max_samples']:,} | {size_mb:.0f} MB")
+            if count >= spec["max_samples"]:
+                break
+
+    size_mb = os.path.getsize(output_file) / (1024 * 1024)
+    print(f"[{spec['name']}] done -> {output_file} ({size_mb:.0f} MB)")
 
 
-def download_books():
-    print("\n📖 [3/3] Books download ho raha hai (100K lines ~500MB)...")
-    output_file = f"{DATA_FOLDER}/books.txt"
-    count = 0
-    dataset = load_dataset("bookcorpus/bookcorpus", split="train", streaming=True)
-    with open(output_file, "w", encoding="utf-8") as f:
-        for sample in dataset:
-            text = clean_text(sample["text"])
-            if len(text) > 50:
-                f.write(text + "\n")
-                count += 1
-                if count % 10000 == 0:
-                    size = os.path.getsize(output_file) / (1024*1024)
-                    print(f"   {count}/100000 | {size:.0f} MB")
-                if count >= 100000:
-                    break
-    size_mb = os.path.getsize(output_file) / (1024*1024)
-    print(f"✅ Books done → {size_mb:.0f} MB")
+def main() -> None:
+    print("=" * 55)
+    print("  MANINMIRON - Full Dataset Download")
+    print("  " + " + ".join(s["name"] for s in SOURCES))
+    print("=" * 55)
+
+    for spec in SOURCES:
+        download_source(spec)
+
+    print("\n" + "=" * 55)
+    print("  Sab datasets download complete! Files:")
+    for spec in SOURCES:
+        print(f"    data/{spec['output']}")
+    print("\n  Ab tokenize karo:  python prepare_data.py")
+    print("  Phir train karo :  python train.py")
+    print("=" * 55)
 
 
 if __name__ == "__main__":
-    print("=" * 55)
-    print("  MANINMIRON - Full Dataset Download")
-    print("  Wikipedia + OpenWebText + Books = ~3.5 GB")
-    print("=" * 55)
-
-    download_wikipedia()
-    download_openwebtext()
-    download_books()
-
-    print()
-    print("=" * 55)
-    print("  ✅ Sab datasets download complete!")
-    print()
-    print("  data/")
-    print("  ├── wikipedia_en.txt  ~1 GB")
-    print("  ├── openwebtext.txt   ~2 GB")
-    print("  └── books.txt         ~500 MB")
-    print()
-    print("  Ab train karo: python train.py")
-    print("=" * 55)
+    main()

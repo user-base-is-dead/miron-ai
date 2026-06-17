@@ -1,7 +1,6 @@
-import tiktoken
 import json
-import os
-from pathlib import Path
+
+import tiktoken
 
 # ─────────────────────────────────────────
 #  MANINMIRON TOKENIZER
@@ -47,7 +46,7 @@ class ManinmironTokenizer:
         clean = [t for t in tokens if t < 100257]
         return self.enc.decode(clean)
 
-    def encode_chat(self, user_msg: str, assistant_msg: str = None) -> list[int]:
+    def encode_chat(self, user_msg: str, assistant_msg: str | None = None) -> list[int]:
         """
         Chat format mein encode karo:
         <|user|> message <|sep|> <|assistant|> response <|eos|>
@@ -85,13 +84,13 @@ class ManinmironTokenizer:
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
-        print(f"Tokenizer config saved → {path}")
+        print(f"Tokenizer config saved -> {path}")
 
     def load(self, path: str = "tokenizer_config.json"):
         """Tokenizer config load karo"""
         with open(path, "r", encoding="utf-8") as f:
             config = json.load(f)
-        print(f"Tokenizer config loaded ← {path}")
+        print(f"Tokenizer config loaded <- {path}")
         return config
 
     def stats(self, text: str):
@@ -136,4 +135,4 @@ if __name__ == "__main__":
     # Save config
     tok.save("tokenizer_config.json")
 
-    print("\nTokenizer test PASSED ✓")
+    print("\nTokenizer test PASSED")
