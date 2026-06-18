@@ -17,6 +17,14 @@ import os
 import sys
 from pathlib import Path
 
+# ── Python version guard (numpy/tqdm import se pehle saaf error) ─────────────
+if sys.version_info[:2] != (3, 11):
+    raise SystemExit(
+        f"[Miron] Python 3.11.x chahiye (abhi {sys.version.split()[0]} chal raha hai).\n"
+        "        venv activate karo -> Windows: Miron311\\Scripts\\activate"
+        "  |  Linux/Mac: source Miron311/bin/activate"
+    )
+
 import numpy as np
 from tqdm import tqdm
 

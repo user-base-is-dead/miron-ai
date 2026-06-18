@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Project metadata — yahan ka MAIN kaam: required Python version declare karna.
+#
+#  • `uv` is `requires-python` ko padh ke khud sahi interpreter (3.11) pick karta
+#    hai:  `uv venv`, `uv run`, `uv sync`.
+#  • `pip install .` bhi galat Python pe refuse kar dega ("Requires-Python ...").
+#
+#  Dependencies yahan NAHI hain — wo `requirements.txt` mein hi rehti hain (ek hi
+#  source of truth). Isliye `[tool.uv] package = false` se ise "virtual" project
+#  rakha hai: uv sirf environment + Python version manage karega, is repo ko
+#  package ki tarah build/install karne ki koshish nahi karega.
+#
+#  Detail + troubleshooting: docs/python-version.md
+# ─────────────────────────────────────────────────────────────────────────────
+
+[project]
+name = "miron-llm"
+version = "0.1.0"
+description = "From-scratch GPT/LLaMA-style decoder-only LLM you can pretrain on your own hardware."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+
+[tool.uv]
+# Ye ek runnable repo hai (scripts/), installable package nahi — uv ise build na kare.
+package = false

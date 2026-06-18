@@ -48,7 +48,10 @@ settings/
   README.md           # what every setting does
 data/                 # (git-ignored) downloaded-data/ (raw) + tokenized/ (.bin)
 saved_model/          # checkpoints (.pt are git-ignored) + config.json snapshot
+docs/
+  python-version.md   # required Python version + setup / troubleshooting
 requirements.txt
+pyproject.toml        # project metadata + requires-python (pins Python 3.11)
 ```
 
 All commands are run **from the repo root**.
@@ -56,6 +59,11 @@ All commands are run **from the repo root**.
 ---
 
 ## Setup
+
+> **Requires Python 3.11.x.** The pinned deps (`torch`, `numpy`, …) have no wheels
+> for newer versions like 3.14, so the entry points will refuse to run on anything
+> else. Setup steps, version checks, and troubleshooting:
+> [`docs/python-version.md`](docs/python-version.md).
 
 ```bash
 # create + activate a Python 3.11 environment, then:

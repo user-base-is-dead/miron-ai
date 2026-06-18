@@ -1,5 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #  miron dependencies  —  EK HI file, GPU + CPU dono pe chalti hai
+#  Required Python: 3.11  (3.11.x — README + venv dono yahi use karte hain)
 # ─────────────────────────────────────────────────────────────────────────────
 #  Install (kisi bhi laptop pe — GPU ho ya na ho):
 #
