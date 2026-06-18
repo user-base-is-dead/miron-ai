@@ -1,6 +1,8 @@
 # Virtual Environments
-Maninmiron/
-Maninmiron311/
+Miron/
+Miron311/
+# existing on-disk venv (rename/recreate as Miron311, then delete this line)
+Miron311/
 venv/
 .venv/
 

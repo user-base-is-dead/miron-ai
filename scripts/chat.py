@@ -1,6 +1,6 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
-  MANINMIRON CHAT  —  terminal interface for the trained base model
+  MIRON CHAT  —  terminal interface for the trained base model
 ─────────────────────────────────────────────────────────────────────────────
   Loads the enterprise checkpoint (saved_model/) and generates text with the
   new architecture: KV-cache decoding + token streaming + top-k/top-p +
@@ -23,15 +23,15 @@ import torch
 # scripts/ ke andar hai).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core.maninmiron_llm import Config, ManinmironLLM
-from core.tokenizer import ManinmironTokenizer
+from core.miron_llm import Config, MironLLM
+from core.tokenizer import MironTokenizer
 
 SAVE_FOLDER = "saved_model"
 
 
 def pick_checkpoint() -> Path:
-    best = Path(f"{SAVE_FOLDER}/maninmiron_best.pt")
-    last = Path(f"{SAVE_FOLDER}/maninmiron.pt")
+    best = Path(f"{SAVE_FOLDER}/miron_best.pt")
+    last = Path(f"{SAVE_FOLDER}/miron.pt")
     if best.exists():
         return best
     if last.exists():
@@ -53,7 +53,7 @@ def load_model():
         sys.exit(1)
 
     cfg = Config.from_dict(ckpt["model_cfg"])
-    model = ManinmironLLM(cfg).to(device)
+    model = MironLLM(cfg).to(device)
     model.load_state_dict(ckpt["model"])
     model.eval()
 
@@ -101,7 +101,7 @@ def generate_stream(model, tokenizer, prompt, device, cfg,
 
 def chat():
     print("\n" + "=" * 56)
-    print("  MANINMIRON AI  —  Chat (base model)")
+    print("  MIRON  —  Chat (base model)")
     print("=" * 56)
     print("  'quit' / 'exit'  ->  band karo")
     print("  'clear'          ->  screen saaf")
@@ -109,7 +109,7 @@ def chat():
     print("=" * 56 + "\n")
 
     model, cfg, device = load_model()
-    tokenizer = ManinmironTokenizer()
+    tokenizer = MironTokenizer()
 
     settings = dict(max_new_tokens=200, temperature=0.8, top_k=40,
                     top_p=0.95, repetition_penalty=1.15)
@@ -123,7 +123,7 @@ def chat():
 
             low = user_input.lower()
             if low in ("quit", "exit", "band karo"):
-                print("\nManinmiron: Theek hai bhai, phir milenge!")
+                print("\nMiron: Theek hai bhai, phir milenge!")
                 break
             if low == "clear":
                 import os
@@ -143,12 +143,12 @@ def chat():
                     print("  galat value")
                 continue
 
-            print("Maninmiron: ", end="", flush=True)
+            print("Miron: ", end="", flush=True)
             generate_stream(model, tokenizer, user_input, device, cfg, **settings)
             print()
 
         except KeyboardInterrupt:
-            print("\n\nManinmiron: Theek hai bhai, phir milenge!")
+            print("\n\nMiron: Theek hai bhai, phir milenge!")
             break
         except Exception as e:
             print(f"\nError: {e}\n")

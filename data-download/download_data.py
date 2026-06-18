@@ -109,7 +109,7 @@ def download_source(spec: dict) -> None:
 
 def main() -> None:
     print("=" * 55)
-    print("  MANINMIRON - Full Dataset Download")
+    print("  MIRON - Full Dataset Download")
     print("  " + " + ".join(s["name"] for s in SOURCES))
     print("=" * 55)
 

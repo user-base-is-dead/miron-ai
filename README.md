@@ -1,4 +1,4 @@
-# Maninmiron LLM
+# Miron LLM
 
 A from-scratch, GPT/LLaMA-style decoder-only language model you can **pretrain on
 your own hardware** — from a 4GB laptop GPU up to multi-GPU nodes — with automatic
@@ -12,7 +12,7 @@ hardware detection and a single editable settings file.
 
 ## Architecture
 
-A modern decoder-only transformer (`core/maninmiron_llm.py`):
+A modern decoder-only transformer (`core/miron_llm.py`):
 
 - **RMSNorm** (faster, more stable than LayerNorm)
 - **RoPE** rotary position embeddings (no learned position table)
@@ -33,7 +33,7 @@ vocab size **100263**.
 ```
 core/                 # Support modules (imported by scripts/)
   config.py           #   profiles, hardware detection, settings loader
-  maninmiron_llm.py   #   the model (Config + ManinmironLLM)
+  miron_llm.py   #   the model (Config + MironLLM)
   dataset.py          #   memory-mapped .bin token loader
   tokenizer.py        #   tiktoken wrapper + chat format
 scripts/              # Runnable entry points
@@ -135,7 +135,7 @@ saved step.
 
 ## Notes
 
-- **Resume** is automatic: if `saved_model/maninmiron.pt` exists, training loads
+- **Resume** is automatic: if `saved_model/miron.pt` exists, training loads
   the model + optimizer + step and continues. Change the model architecture and
   the old checkpoint won't load (training restarts cleanly).
 - **Continual training on new data:** don't delete the old data and train only on

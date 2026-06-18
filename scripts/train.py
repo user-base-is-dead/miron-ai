@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core.config import (build_model_config, format_hardware_report,
                          get_active_config, resolve_profile_name)
 from core.dataset import get_bin_dataloaders
-from core.maninmiron_llm import ManinmironLLM
+from core.miron_llm import MironLLM
 
 
 # ── Distributed / device helpers ──────────────────────────────────────────────
@@ -257,7 +257,7 @@ def train():
 
     # ── Model ───────────────────────────────────────────────────────────────────
     model_cfg = build_model_config(vars(c), vocab_size)
-    model = ManinmironLLM(model_cfg).to(device)
+    model = MironLLM(model_cfg).to(device)
 
     # ── VRAM preflight: kitna chahiye vs kitna free (OOM se pehle heads-up) ────
     if device_type == "cuda":
@@ -279,7 +279,7 @@ def train():
     # ── Resume (load into the raw module BEFORE compile/DDP wrap) ──────────────
     start_step = 0
     best_val = float("inf")
-    ckpt_path = f"{c.save_folder}/maninmiron.pt"
+    ckpt_path = f"{c.save_folder}/miron.pt"
     if Path(ckpt_path).exists():
         log(f"Resuming from {ckpt_path}...")
         ck = torch.load(ckpt_path, map_location=device)
@@ -400,7 +400,7 @@ def train():
                       f"(best {best_val:.4f})")
                 if val_loss < best_val:
                     best_val = val_loss
-                    save_ckpt(f"{c.save_folder}/maninmiron_best.pt", raw_model,
+                    save_ckpt(f"{c.save_folder}/miron_best.pt", raw_model,
                               optimizer, scaler, step + 1, best_val, model_cfg, c)
                     print(f"  -> new best (val_loss {best_val:.4f}) saved")
             # best_val ko sab ranks pe sync rakho (warna logic diverge ho jaata)

@@ -3,12 +3,12 @@ import json
 import tiktoken
 
 # ─────────────────────────────────────────
-#  MANINMIRON TOKENIZER
+#  MIRON TOKENIZER
 #  Hinglish + English support
 #  tiktoken (GPT-4 ka tokenizer) use karta hai
 # ─────────────────────────────────────────
 
-class ManinmironTokenizer:
+class MironTokenizer:
     def __init__(self):
         # cl100k_base = GPT-4 tokenizer (Hindi/Hinglish bhi handle karta hai)
         self.enc = tiktoken.get_encoding("cl100k_base")
@@ -106,7 +106,7 @@ class ManinmironTokenizer:
 #  Test
 # ─────────────────────────────────────────
 if __name__ == "__main__":
-    tok = ManinmironTokenizer()
+    tok = MironTokenizer()
 
     # English test
     print("\n── English Test ──")

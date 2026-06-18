@@ -1,1 +1,1 @@
-"""Core support modules for the Maninmiron LLM (imported by scripts/)."""
+"""Core support modules for the Miron LLM (imported by scripts/)."""

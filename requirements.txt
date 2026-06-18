@@ -1,10 +1,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  miron-ai dependencies  —  EK HI file, GPU + CPU dono pe chalti hai
+#  miron dependencies  —  EK HI file, GPU + CPU dono pe chalti hai
 # ─────────────────────────────────────────────────────────────────────────────
 #  Install (kisi bhi laptop pe — GPU ho ya na ho):
 #
-#      uv venv Maninmiron311 --python 3.11
-#      source Maninmiron311/bin/activate        # Windows: Maninmiron311\Scripts\activate
+#      uv venv Miron311 --python 3.11
+#      source Miron311/bin/activate        # Windows: Miron311\Scripts\activate
 #      uv pip install -r requirements.txt        # (ya: pip install -r requirements.txt)
 #
 #  Kaise dono pe chalti hai:

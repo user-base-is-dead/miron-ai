@@ -1,6 +1,6 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
-  MANINMIRON LLM  —  Enterprise-grade GPT-style decoder transformer
+  MIRON LLM  —  Enterprise-grade GPT-style decoder transformer
 ─────────────────────────────────────────────────────────────────────────────
   Modern architecture:
     • RMSNorm                 (faster, more stable than LayerNorm)
@@ -179,7 +179,7 @@ class Block(nn.Module):
 
 
 # ── Main Model ─────────────────────────────────────────────────────────────────
-class ManinmironLLM(nn.Module):
+class MironLLM(nn.Module):
     def __init__(self, cfg: Config):
         super().__init__()
         self.cfg = cfg
@@ -204,7 +204,7 @@ class ManinmironLLM(nn.Module):
             if name.endswith("o_proj.weight") or name.endswith("w_down.weight"):
                 nn.init.normal_(p, mean=0.0, std=0.02 / math.sqrt(2 * cfg.num_layers))
 
-        print(f"ManinmironLLM | {self.count_params()/1e6:.1f}M params | "
+        print(f"MironLLM | {self.count_params()/1e6:.1f}M params | "
               f"L{cfg.num_layers} d{cfg.d_model} h{cfg.num_heads}/kv{cfg.num_kv_heads} ctx{cfg.context_length}")
 
     def _init_weights(self, m):
@@ -376,7 +376,7 @@ class ManinmironLLM(nn.Module):
 if __name__ == "__main__":
     cfg = Config(num_layers=2, d_model=128, num_heads=4, num_kv_heads=2,
                  d_ff=256, context_length=64, vocab_size=1000)
-    model = ManinmironLLM(cfg)
+    model = MironLLM(cfg)
 
     x = torch.randint(0, cfg.vocab_size, (2, 16))
     y = torch.randint(0, cfg.vocab_size, (2, 16))

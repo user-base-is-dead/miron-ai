@@ -24,7 +24,7 @@ from tqdm import tqdm
 # scripts/ ke andar hai).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from core.tokenizer import ManinmironTokenizer
+from core.tokenizer import MironTokenizer
 
 RAW_FOLDER   = "data/downloaded-data"   # raw .txt yahan se (download_data.py output)
 OUT_FOLDER   = "data/tokenized"         # bins + meta yahan (training yahin se padhta hai)
@@ -36,7 +36,7 @@ CHUNK_CHARS  = 2_000_000       # read text in ~2MB chunks to bound memory
 
 
 def main():
-    tok = ManinmironTokenizer()
+    tok = MironTokenizer()
     # cl100k_base max id < 100263 -> fits in uint32 (uint16 would overflow)
     dtype = np.uint32
 

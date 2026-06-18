@@ -29,7 +29,7 @@ from pathlib import Path
 ACTIVE_PROFILE = "auto"
 
 
-# ── Model Config ke fields (maninmiron_llm.Config se match karte hain) ────────
+# ── Model Config ke fields (miron_llm.Config se match karte hain) ────────
 # vocab_size yahan jaan-bujh ke nahi — wo meta.json se runtime pe aata hai.
 MODEL_FIELDS = {
     "context_length", "d_model", "num_heads", "num_kv_heads", "num_layers",
@@ -284,8 +284,8 @@ def get_active_config(name: str | None = None, free_gb: float | None = None) -> 
 
 
 def build_model_config(cfg: dict, vocab_size: int):
-    """Flat config dict + meta.json ka vocab_size -> maninmiron_llm.Config."""
-    from core.maninmiron_llm import Config
+    """Flat config dict + meta.json ka vocab_size -> miron_llm.Config."""
+    from core.miron_llm import Config
     fields = {k: cfg[k] for k in MODEL_FIELDS if k in cfg}
     return Config(vocab_size=vocab_size, **fields)
 
