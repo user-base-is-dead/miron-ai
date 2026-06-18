@@ -60,15 +60,6 @@ SOURCES = [
         "output": "openwebtext.txt",
         "separator": "\n\n",
     },
-    {
-        "name": "BookCorpus",
-        "path": "bookcorpus/bookcorpus",
-        "config": None,
-        "min_chars": 50,
-        "max_samples": 100_000,
-        "output": "books.txt",
-        "separator": "\n",
-    },
 ]
 
 
