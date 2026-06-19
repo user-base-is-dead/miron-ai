@@ -12,5 +12,6 @@
   "save_every": 500,
   "num_workers": 2,
   "weight_decay": 0.1,
-  "grad_clip": 1.0
+  "grad_clip": 1.0,
+  "optimizer_type": "adamw"
 }
