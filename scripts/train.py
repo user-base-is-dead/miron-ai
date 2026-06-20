@@ -290,24 +290,30 @@ def train():
     ckpt_path = f"{c.save_folder}/miron.pt"
     if Path(ckpt_path).exists():
         log(f"Resuming from {ckpt_path}...")
-        ck = torch.load(ckpt_path, map_location=device)
+        ck = torch.load(ckpt_path, map_location=device, weights_only=False)
         if "model" in ck:
             try:
                 model.load_state_dict(ck["model"])
-                optimizer.load_state_dict(ck["optimizer"])
-                if scaler is not None and ck.get("scaler"):
-                    scaler.load_state_dict(ck["scaler"])
                 start_step = ck.get("step", 0)
                 best_val = ck.get("best_val", float("inf"))
-                log(f"  resumed at step {start_step} (best_val {best_val:.4f})")
+                log(f"  model weights loaded at step {start_step} (best_val {best_val:.4f})")
             except (RuntimeError, ValueError, KeyError) as e:
-                # Profile/architecture/optimizer badal gaya -> purana checkpoint
-                # fit nahi hoga. Crash ke bajaye fresh training shuru karo.
-                log(f"  checkpoint current profile se match nahi karta ({e})")
-                log("  -> fresh training shuru kar rahe hain")
+                log(f"  model weights match nahi karte ({e}) -> fresh training")
                 start_step, best_val = 0, float("inf")
+            else:
+                # optimizer state alag platform/config pe incompatible ho sakta
+                # hai — crash hone se behtar hai fresh optimizer (LR schedule sahi
+                # rahe isliye start_step preserve karte hain)
+                try:
+                    optimizer.load_state_dict(ck["optimizer"])
+                    if scaler is not None and ck.get("scaler"):
+                        scaler.load_state_dict(ck["scaler"])
+                    log(f"  optimizer state restored")
+                except Exception as oe:
+                    log(f"  optimizer state load nahi hua ({oe}) -> fresh optimizer "
+                        f"(model weights + step {start_step} preserved)")
         else:
-            log("  old-format checkpoint mila, incompatible architecture -> training fresh")
+            log("  old-format checkpoint mila, incompatible -> training fresh")
 
     # raw_model = clean handle for checkpointing (compile/DDP se pehle pakad lo,
     # taaki state_dict keys saaf rahein aur chat.py load kar sake).
