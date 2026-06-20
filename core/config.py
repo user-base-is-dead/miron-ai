@@ -23,6 +23,12 @@ import os
 from pathlib import Path
 
 
+# Repo root = is file (core/config.py) ka parent.parent. Default data/model
+# paths isi pe anchor hote hain -> repo root se ya scripts/ ke andar se, kahin
+# se bhi chalao, paths sahi rahenge (CWD pe depend nahi karte).
+_ROOT = Path(__file__).resolve().parent.parent
+
+
 # ── Yahan badlo: kaunsa profile use karna hai ────────────────────────────────
 # "auto"  = GPU dekh ke khud chun lega (recommended)
 # ya seedha likho: "cpu", "gpu_4gb", "gpu_8gb", "gpu_12gb", "gpu_24gb", "gpu_40gb"
@@ -39,8 +45,8 @@ MODEL_FIELDS = {
 
 # ── Har profile me common cheezein (taaki har profile chhota rahe) ────────────
 DEFAULTS = dict(
-    data_folder="data/tokenized",
-    save_folder="saved_model",
+    data_folder=str(_ROOT / "data" / "tokenized"),
+    save_folder=str(_ROOT / "saved_model"),
     # LR schedule
     warmup_steps=200,
     min_lr=6e-5,

@@ -27,14 +27,15 @@ if sys.version_info[:2] != (3, 11):
 
 import torch
 
-# Repo root ko sys.path pe daalo taaki 'core' package import ho sake (yeh file
-# scripts/ ke andar hai).
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Repo root pe anchor -> 'core' import AUR checkpoint path dono CWD-independent.
+# chat.py ko repo root se ya scripts/ ke andar se, kahin se bhi chala sakte ho.
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
 
 from core.miron_llm import Config, MironLLM
 from core.tokenizer import MironTokenizer
 
-SAVE_FOLDER = "saved_model"
+SAVE_FOLDER = str(_ROOT / "saved_model")
 
 
 def pick_checkpoint() -> Path:

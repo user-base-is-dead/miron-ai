@@ -28,14 +28,14 @@ if sys.version_info[:2] != (3, 11):
 import numpy as np
 from tqdm import tqdm
 
-# Repo root ko sys.path pe daalo taaki 'core' package import ho sake (yeh file
-# scripts/ ke andar hai).
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Repo root pe anchor -> 'core' import + data paths CWD-independent (kahin se bhi chalao).
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
 
 from core.tokenizer import MironTokenizer
 
-RAW_FOLDER   = "data/downloaded-data"   # raw .txt yahan se (download_data.py output)
-OUT_FOLDER   = "data/tokenized"         # bins + meta yahan (training yahin se padhta hai)
+RAW_FOLDER   = str(_ROOT / "data" / "downloaded-data")   # raw .txt (download_data.py output)
+OUT_FOLDER   = str(_ROOT / "data" / "tokenized")         # bins + meta (training yahin se padhta hai)
 TRAIN_BIN    = f"{OUT_FOLDER}/train.bin"
 VAL_BIN      = f"{OUT_FOLDER}/val.bin"
 META_FILE    = f"{OUT_FOLDER}/meta.json"
