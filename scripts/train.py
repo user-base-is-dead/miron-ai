@@ -301,17 +301,23 @@ def train():
                 log(f"  model weights match nahi karte ({e}) -> fresh training")
                 start_step, best_val = 0, float("inf")
             else:
-                # optimizer state alag platform/config pe incompatible ho sakta
-                # hai — crash hone se behtar hai fresh optimizer (LR schedule sahi
-                # rahe isliye start_step preserve karte hain)
+                # optimizer param_groups (lr, wd) restore karo par momentum states
+                # NAHI — fused/non-fused cross-platform mismatch se crash hota hai.
+                # Fresh momentum states se training bilkul sahi chalti hai; sirf
+                # pehle kuch steps me thoda extra loss hoga (LR warm-up jaisa).
                 try:
-                    optimizer.load_state_dict(ck["optimizer"])
+                    saved_opt = ck.get("optimizer", {})
+                    saved_groups = saved_opt.get("param_groups", [])
+                    if saved_groups:
+                        for pg, spg in zip(optimizer.param_groups, saved_groups):
+                            for k in ("lr", "weight_decay", "betas", "eps"):
+                                if k in spg:
+                                    pg[k] = spg[k]
+                        log(f"  optimizer param_groups restored (lr/wd); momentum states fresh")
                     if scaler is not None and ck.get("scaler"):
                         scaler.load_state_dict(ck["scaler"])
-                    log(f"  optimizer state restored")
                 except Exception as oe:
-                    log(f"  optimizer state load nahi hua ({oe}) -> fresh optimizer "
-                        f"(model weights + step {start_step} preserved)")
+                    log(f"  optimizer restore skip ({oe}) -> fully fresh optimizer")
         else:
             log("  old-format checkpoint mila, incompatible -> training fresh")
 
