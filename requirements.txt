@@ -27,3 +27,6 @@ datasets==4.8.5
 # GPU-only optimizer helper (CPU/Mac pe automatically skip). Linux + Windows
 # dono ke official wheels hain. Na mile to code torch AdamW pe fallback karta hai.
 bitsandbytes>=0.43.0 ; platform_system == "Linux" or platform_system == "Windows"
+
+
+# Command: MIRON_PROFILE=cpu python scripts/train.py (for cpu)

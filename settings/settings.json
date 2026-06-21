@@ -1,5 +1,5 @@
 {
-  "profile": "auto",
+  "profile": "gpu_4gb",
   "max_steps": 20000,
   "lr": 0.0006,
   "min_lr": 0.00006,
@@ -13,5 +13,8 @@
   "num_workers": 2,
   "weight_decay": 0.1,
   "grad_clip": 1.0,
-  "optimizer_type": "adamw"
+  "optimizer_type": "adamw",
+  "sft_max_steps": 2000,
+  "sft_lr": 2e-5,
+  "sft_min_lr": 2e-6
 }
