@@ -1,7 +1,14 @@
 # Training Settings — Guide
 
-This folder holds **`settings.json`**, the one place you edit to control training
-**without touching any code**.
+This folder holds the files you edit to control training **without touching any
+code**:
+
+- **`settings.json`** — **base training** (`scripts/train.py`).
+- **`sft_settings.json`** — **instruction fine-tuning / SFT** (`scripts/sft.py`).
+
+They are independent: editing one does **not** affect the other. Most of this
+guide describes `settings.json`; the SFT file uses the **same keys** and is
+described in its own section below.
 
 ## How it works
 1. Open `settings.json`.
@@ -111,6 +118,58 @@ profile's default. Anything is allowed; the program reads this file every run.
 - **Options:** float `> 0` (use `0` to disable clipping).
 - **Default:** `1.0`.
 - **When to change:** Advanced only; keep ~`1.0` to prevent loss spikes.
+
+---
+
+## SFT settings (`sft_settings.json`)
+
+For **instruction fine-tuning** (`scripts/sft.py`), edit **`sft_settings.json`**
+instead of `settings.json`. It uses the **same key names** as above (no `sft_`
+prefix), but holds SFT-appropriate values. SFT is short and uses a **much smaller
+learning rate** than base training, so the base model doesn't "forget" what it
+learned during pretraining.
+
+```jsonc
+{
+  "max_steps": 2000,                    // SFT is short: ~1–3 passes over chat data
+  "lr": 2e-5,                           // ~30x smaller than base lr (6e-4)
+  "min_lr": 2e-6,
+  "warmup_steps": 50,
+  "eval_every": 200,
+  "eval_iters": 50,
+  "log_every": 10,
+  "save_every": 200,
+  "batch_size": 1,                      // OOM knobs — same meaning as base
+  "grad_accum": 64,
+  "optimizer_type": "paged_adamw_8bit", // 4GB GPU friendly (offloads to CPU RAM)
+  "num_workers": 2
+}
+```
+
+What's different from base training:
+
+- **`lr` is tiny** (`2e-5`). Higher SFT LR makes the model forget its pretraining
+  ("catastrophic forgetting") and talk nonsense. Keep it small.
+- **`max_steps` is small** (`2000`). SFT data is small, so too many steps =
+  **overfitting** (the model memorises the examples and answers new questions
+  worse). Sweet spot is ~`2000`–`5000`. Don't go much higher.
+- **`optimizer_type`** here only affects SFT. `"paged_adamw_8bit"` keeps optimizer
+  state in CPU RAM so a ~100M model fits a 4GB GPU. It needs the `bitsandbytes`
+  package; if that isn't installed it **automatically falls back** to plain
+  `"adamw"` (which may not fit a 4GB GPU — then use `"cpu"` or install
+  `bitsandbytes`).
+
+Resume / train-more works exactly like base: raise `max_steps` above the saved
+step and run `python scripts/sft.py` again — it continues from the last SFT
+checkpoint (`saved_model/miron_sft.pt`).
+
+Override priority (highest first):
+`MIRON_SFT_<KEY>` env var → `sft_settings.json` → (legacy) `sft_<key>` in
+`settings.json` → built-in default.
+
+> Model **shape** and **context length** are NOT here — SFT inherits them from the
+> base checkpoint it loads, so they always match. `batch_size` / `grad_accum` /
+> `optimizer_type` / `num_workers` fall back to the hardware profile if omitted.
 
 ---
 

@@ -16,16 +16,20 @@
     3) python scripts/sft.py                          (fine-tune)
        torchrun --nproc_per_node=N scripts/sft.py     (multi-GPU)
 
-  Tuning (settings/settings.json me ya env se override):
-    sft_max_steps, sft_lr, sft_min_lr, sft_warmup_steps,
-    sft_eval_every, sft_eval_iters, sft_save_every, sft_log_every
-    (env: MIRON_SFT_MAX_STEPS, MIRON_SFT_LR, ... bade-case me)
+  Tuning — settings/sft_settings.json (base ke settings.json ki tarah, par
+  SIRF SFT ke liye). Keys (clean, bina `sft_` prefix):
+    max_steps, lr, min_lr, warmup_steps,
+    eval_every, eval_iters, save_every, log_every,
+    batch_size, grad_accum, optimizer_type, num_workers
+    (env override: MIRON_SFT_MAX_STEPS, MIRON_SFT_LR, ... bade-case me)
+    (purana settings.json `sft_max_steps` etc. abhi bhi fallback ke roop me chalega)
   Paths (env):
     MIRON_BASE_CKPT  -> base se load (default: saved_model/miron_best.pt|miron.pt)
     MIRON_SFT_DATA   -> SFT bins folder (default: data/tokenized_sft)
     MIRON_SFT_OUT    -> output checkpoint (default: saved_model/miron_sft.pt)
-  Batch/accum/optimizer/precision profile se aate hain (train.py jaisa);
-  model architecture + context length BASE checkpoint se aate hain.
+  batch/accum/optimizer/workers sft_settings.json se override ho sakte hain,
+  warna profile (train.py jaisa) se aate hain; precision auto; model
+  architecture + context length BASE checkpoint se aate hain.
 ─────────────────────────────────────────────────────────────────────────────
 """
 
@@ -60,7 +64,7 @@ from core.dataset import get_sft_dataloaders
 from core.miron_llm import Config, MironLLM
 
 
-# ── SFT hyperparam defaults (settings.json `sft_*` / env MIRON_SFT_* override) ─
+# ── SFT hyperparam defaults (sft_settings.json / settings.json `sft_*` / env) ─
 SFT_DEFAULTS = dict(
     max_steps=2000,        # SFT chhoti hoti hai — 1-3 epochs over chat data
     lr=2e-5,               # base pretrain LR se kaafi kam (warna base "bhool" jaata)
@@ -72,24 +76,37 @@ SFT_DEFAULTS = dict(
     log_every=10,
 )
 
-_SETTINGS_FILE = Path(__file__).resolve().parent.parent / "settings" / "settings.json"
+# SFT ka apna dedicated settings file (base train ke settings.json ki tarah).
+# settings.json sirf BASE training ke liye; sft_settings.json sirf SFT ke liye.
+_SFT_SETTINGS_FILE = Path(__file__).resolve().parent.parent / "settings" / "sft_settings.json"
+_SETTINGS_FILE     = Path(__file__).resolve().parent.parent / "settings" / "settings.json"
 
 
-def _load_settings() -> dict:
+def _read_json(path: Path) -> dict:
     try:
-        d = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+        d = json.loads(path.read_text(encoding="utf-8"))
         return d if isinstance(d, dict) else {}
     except (OSError, json.JSONDecodeError):
         return {}
 
 
-def _sft_param(key: str, cast, settings: dict):
-    """Priority: env MIRON_SFT_<KEY> > settings.json `sft_<key>` > default."""
+def _load_settings() -> tuple[dict, dict]:
+    """(sft_settings.json, settings.json) dono padho.
+    sft_settings.json -> SFT-dedicated (clean keys: max_steps, lr, ...).
+    settings.json     -> purane `sft_` prefixed keys (backward-compat fallback)."""
+    return _read_json(_SFT_SETTINGS_FILE), _read_json(_SETTINGS_FILE)
+
+
+def _sft_param(key: str, cast, sft_settings: dict, settings: dict):
+    """Priority: env MIRON_SFT_<KEY> > sft_settings.json `<key>`
+    > settings.json `sft_<key>` (purana) > default."""
     env = os.environ.get("MIRON_SFT_" + key.upper())
     if env not in (None, ""):
         return cast(env)
+    if key in sft_settings:                 # dedicated SFT file (clean key)
+        return cast(sft_settings[key])
     skey = "sft_" + key
-    if skey in settings:
+    if skey in settings:                    # purana settings.json `sft_` key
         return cast(settings[skey])
     return SFT_DEFAULTS[key]
 
@@ -222,21 +239,30 @@ def train_sft():
     else:
         c = SimpleNamespace(**get_active_config(free_gb=free_gb))
 
+    # SFT settings load karo (sft_settings.json + purana settings.json).
+    # batch/accum/optimizer/workers ko SFT ke liye override karo — base training
+    # (settings.json) ko chhede bina. Profile/hardware defaults baaki same.
+    sft_settings, settings = _load_settings()
+    for _k, _cast in (("batch_size", int), ("grad_accum", int),
+                      ("num_workers", int), ("optimizer_type", str)):
+        if _k in sft_settings:
+            setattr(c, _k, _cast(sft_settings[_k]))
+
     torch.manual_seed(c.seed + rank)
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
-    # ── SFT hyperparams ───────────────────────────────────────────────────────
-    settings = _load_settings()
+    # ── SFT hyperparams (settings/sft_settings.json) ──────────────────────────
+    # sft_settings/settings upar load ho chuke (profile block me).
     s = SimpleNamespace(
-        max_steps=_sft_param("max_steps", int, settings),
-        lr=_sft_param("lr", float, settings),
-        min_lr=_sft_param("min_lr", float, settings),
-        warmup_steps=_sft_param("warmup_steps", int, settings),
-        eval_every=_sft_param("eval_every", int, settings),
-        eval_iters=_sft_param("eval_iters", int, settings),
-        save_every=_sft_param("save_every", int, settings),
-        log_every=_sft_param("log_every", int, settings),
+        max_steps=_sft_param("max_steps", int, sft_settings, settings),
+        lr=_sft_param("lr", float, sft_settings, settings),
+        min_lr=_sft_param("min_lr", float, sft_settings, settings),
+        warmup_steps=_sft_param("warmup_steps", int, sft_settings, settings),
+        eval_every=_sft_param("eval_every", int, sft_settings, settings),
+        eval_iters=_sft_param("eval_iters", int, sft_settings, settings),
+        save_every=_sft_param("save_every", int, sft_settings, settings),
+        log_every=_sft_param("log_every", int, sft_settings, settings),
     )
 
     # DDP large-batch LR scaling (train.py jaisa sqrt rule)
